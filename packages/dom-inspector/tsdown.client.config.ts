@@ -1,6 +1,8 @@
 import { defineConfig } from "tsdown";
 import postcss from "postcss";
 import tailwindcss from "@tailwindcss/postcss";
+import postcssImport from "postcss-import";
+import postcssNested from "postcss-nested";
 import fs from "fs";
 import path from "path";
 
@@ -94,7 +96,15 @@ export default defineConfig({
         }
 
         const resolved = path.isAbsolute(id) ? id : path.resolve(path.dirname(importer), id);
-        return `\0virtual:css:${resolved}`;
+        // Encode the real path so the virtual id does NOT end in ".css" --
+        // rolldown appears to auto-extract any module whose id ends in
+        // ".css" into its own standalone CSS-asset output chunk (the normal,
+        // sensible thing to do for a real stylesheet asset), which silently
+        // disconnects it from the JS import graph entirely: the module
+        // never actually lands inside inspector.js, so `export default
+        // "<css text>"` never reaches the `VisBugStyles`/etc. constants that
+        // read it. Base64-encoding it avoids that path-suffix sniffing.
+        return `\0virtual-css-module:${Buffer.from(resolved, "utf-8").toString("base64")}`;
       },
       async load(id) {
         if (id === "\0virtual:styles") {
@@ -128,10 +138,24 @@ export default defineConfig({
           return `export default ${JSON.stringify(result.css)}`;
         }
 
-        if (id.startsWith("\0virtual:css:")) {
-          const realPath = id.slice("\0virtual:css:".length);
+        if (id.startsWith("\0virtual-css-module:")) {
+          const realPath = Buffer.from(
+            id.slice("\0virtual-css-module:".length),
+            "base64",
+          ).toString("utf-8");
           const cssInput = fs.readFileSync(realPath, "utf-8");
-          const result = await postcss([]).process(cssInput, {
+          // VisBug's CSS uses `@import` (including bare npm specifiers like
+          // `open-props/...`) and native CSS nesting (e.g.
+          // `:not(...)&:hover`, `&` not in leading position). Its upstream
+          // build flattens both at build time via postcss-import/
+          // postcss-nested; relying on the browser's native parser for
+          // either breaks silently — `@import` resolves against the page's
+          // URL (not this file's real directory) and 404s, and this exact
+          // non-leading-`&` nesting form isn't reliably parsed natively,
+          // which was observed to blow up layout-critical rules (e.g. the
+          // toolbar host rendering full-page-sized instead of a small
+          // floating icon strip).
+          const result = await postcss([postcssImport(), postcssNested()]).process(cssInput, {
             from: realPath,
             to: undefined,
           });

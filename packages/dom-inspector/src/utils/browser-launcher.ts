@@ -1,0 +1,117 @@
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
+import { isChromeDisabled } from "./helpers";
+import { registerCleanupHandler } from "./shutdown-manager";
+import type { ServerContext } from "../mcp";
+
+let sharedClient: Client | null = null;
+let sharedSseUrl: string | null = null;
+let connectPromise: Promise<Client> | null = null;
+let cleanupRegistered = false;
+
+async function closeSharedClient(reason?: string): Promise<void> {
+  const clientToClose = sharedClient;
+  sharedClient = null;
+  sharedSseUrl = null;
+  connectPromise = null;
+
+  if (!clientToClose) return;
+  try {
+    console.log(`[dom-inspector] Closing shared browser client: ${reason}`);
+    await clientToClose.close();
+  } catch {
+    // Best-effort cleanup
+  }
+}
+
+function registerProcessCleanupOnce(): void {
+  if (cleanupRegistered) return;
+  cleanupRegistered = true;
+
+  // Register with unified shutdown manager
+  registerCleanupHandler("browser-client", async () => {
+    await closeSharedClient("shutdown");
+  });
+}
+
+async function getOrCreateClient(sseUrl: string): Promise<Client> {
+  if (sharedClient && sharedSseUrl === sseUrl) return sharedClient;
+  if (connectPromise && sharedSseUrl === sseUrl) return connectPromise;
+
+  if (sharedClient && sharedSseUrl !== sseUrl) {
+    await closeSharedClient("sseUrl-changed");
+  }
+
+  sharedSseUrl = sseUrl;
+  sharedClient = new Client({
+    name: "dom-inspector-auto-browser",
+    version: "1.0.0",
+  });
+
+  const transport = new SSEClientTransport(new URL(sseUrl));
+  connectPromise = sharedClient
+    .connect(transport)
+    .then(() => sharedClient as Client)
+    .catch(async (error) => {
+      await closeSharedClient("connect-failed");
+      throw error;
+    })
+    .finally(() => {
+      connectPromise = null;
+    });
+
+  registerProcessCleanupOnce();
+  return connectPromise;
+}
+
+export interface BrowserLaunchOptions {
+  /**
+   * The URL to open in the browser
+   */
+  url: string;
+  /**
+   * Server context with host and port
+   */
+  serverContext: ServerContext;
+}
+
+/**
+ * Launch browser via Chrome DevTools MCP
+ * Uses MCP Client to connect to the MCP server endpoint
+ */
+export async function launchBrowserWithDevTools(options: BrowserLaunchOptions): Promise<boolean> {
+  const { url, serverContext } = options;
+  const chromeDisabled = isChromeDisabled(serverContext.disableChrome);
+
+  if (chromeDisabled) {
+    console.log(
+      `[dom-inspector] 📴 Skipping browser launch: Chrome integration disabled (DOM_INSPECTOR_DISABLE_CHROME=1 or disableChrome: true)`,
+    );
+    return false;
+  }
+
+  const host = serverContext.host === "0.0.0.0" ? "localhost" : serverContext.host || "localhost";
+  const port = serverContext.port || 6137;
+  const sseUrl = `http://${host}:${port}/__mcp__/sse?clientId=browser-launcher-${process.pid}&isAutomated=true`;
+
+  try {
+    const client = await getOrCreateClient(sseUrl);
+
+    // Call chrome_devtools agentic tool — new mcpc format: { tool, args }
+    // Tool names are sanitized by mcpc (dots → underscores), so use chrome_navigate_page
+    await client.callTool({
+      name: "chrome_devtools",
+      arguments: {
+        tool: "chrome_navigate_page",
+        args: { url },
+      },
+    });
+    return true;
+  } catch (error) {
+    console.error(
+      `[dom-inspector] ⚠️  Failed to auto-open browser:`,
+      error instanceof Error ? error.message : String(error),
+    );
+    return false;
+  }
+}

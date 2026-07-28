@@ -1,0 +1,101 @@
+import type { McpServer as McpServerSDK } from "@agentclientprotocol/sdk";
+
+/**
+ * MCP Server configuration for the Agent Client Protocol
+ * Re-exported from @agentclientprotocol/sdk for convenience
+ */
+export type McpServer = McpServerSDK;
+
+/**
+ * ACP (Agent Client Protocol) options for configuring agent behavior
+ */
+export interface AcpOptions {
+  /**
+   * ACP provider mode
+   * @default undefined (skipped if not specified)
+   */
+  acpMode?: string;
+
+  /**
+   * ACP provider model
+   * @default undefined (skipped if not specified)
+   */
+  acpModel?: string;
+
+  /**
+   * Delay in milliseconds after session is initialized to ensure mcp server is ready,
+   * some agents may connect mcp asynchronously after session init
+   * @default undefined (skipped if not specified)
+   */
+  acpDelay?: number;
+
+  /**
+   * Custom system instructions to prepend to user messages
+   * @default undefined (uses built-in DomInspector context)
+   */
+  acpSystemPrompt?: string;
+
+  /**
+   * List of MCP (Model Context Protocol) servers the agent should connect to
+   * @default []
+   */
+  mcpServers?: McpServer[];
+}
+
+// Agent type definition - shared between src and client
+export interface Agent extends AcpOptions {
+  name: string;
+  command: string;
+  args?: string[];
+  env: Array<{
+    key: string;
+    required: boolean;
+    default?: string;
+  }>;
+  authMethodId?: string;
+  meta?: {
+    icon?: string;
+  };
+  /**
+   * Configuration hint text to help users set up the agent
+   */
+  configHint?: string;
+  /**
+   * Link to configuration documentation or setup guide
+   */
+  configLink?: string;
+  /**
+   * Installation command for the agent (shown in error messages)
+   */
+  installCommand?: string;
+  /**
+   * NPM package name for agents that use npm packages (for faster loading via require.resolve)
+   */
+  npmPackage?: string;
+  /**
+   * Arguments to pass when using npm package resolution (separate from npx args)
+   */
+  npmArgs?: string[];
+}
+
+/** MCP Prompt argument schema */
+export interface PromptArgument {
+  name: string;
+  description?: string;
+  required?: boolean;
+}
+
+/** MCP Prompt definition (matches MCP spec + template extension) */
+export interface Prompt {
+  name: string;
+  title?: string;
+  description?: string;
+  /** The actual content/template to insert into the input when selected */
+  template?: string;
+  arguments?: PromptArgument[];
+  icons?: Array<{
+    src: string;
+    mimeType?: string;
+    sizes?: string[];
+  }>;
+}

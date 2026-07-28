@@ -1,0 +1,22 @@
+{
+  "name": "dom-inspector-mcp-monorepo",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Monorepo for dom-inspector-mcp - DOM inspector plugin (bundler plugin + MCP server + browser UI) and the dynamic-island desktop app",
+  "type": "module",
+  "license": "MIT",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "dev": "npm run dev --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "@types/react": "^19.2.2",
+    "@types/react-dom": "^19.2.2",
+    "typescript": "^5.9.3"
+  }
+}

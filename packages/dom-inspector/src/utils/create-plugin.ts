@@ -1,0 +1,494 @@
+import { createUnplugin } from "unplugin";
+import path from "path";
+import type { Connect } from "vite";
+import { setupMcpMiddleware } from "../middleware/mcproute-middleware";
+import { setupInspectorMiddleware } from "../middleware/inspector-middleware";
+import { setupAcpMiddleware } from "../middleware/acp-middleware";
+import { type McpConfigOptions, updateMcpConfigs } from "./config-updater";
+import { launchBrowserWithDevTools } from "./browser-launcher";
+import {
+  getPublicBaseUrl,
+  isChromeDisabled,
+  stripTrailingSlash,
+  substituteEnvVars,
+} from "./helpers";
+import type { AcpOptions, Agent, Prompt } from "../../client/constants/types";
+import { initStdioInterceptor } from "./stdio-interceptor";
+import { startStandaloneServer, getDefaultPort } from "./standalone-server";
+
+export interface DomInspectorOptions extends McpConfigOptions, AcpOptions {
+  /**
+   * Enable/disable the plugin
+   * @default true (automatically disabled in production)
+   */
+  enabled?: boolean;
+
+  /**
+   * Host address for the standalone server to bind to.
+   * - `"localhost"` (default): Only accessible locally, avoids Mixed Content errors (HTTPS→HTTP allowed)
+   * - `"0.0.0.0"` or `true`: Accessible from all network interfaces (useful for Docker, remote access)
+   * - Custom hostname: Bind to specific interface
+   * @default "localhost"
+   * @example true
+   */
+  host?: string | boolean;
+
+  /**
+   * Custom port for MCP server URL
+   * Useful when behind a proxy or port forwarding (e.g., Docker, SSH tunnels)
+   * Can also be set via DOM_INSPECTOR_PORT environment variable
+   * @default 6137
+   * @example 6137
+   */
+  port?: number;
+
+  /**
+   * Public base URL (including protocol) that editors/browsers should use to reach the dev server.
+   *
+   * Use this when the dev server runs in a cloud IDE or behind a reverse proxy where the externally
+   * reachable URL differs from the internal host/port.
+   *
+   * Common use cases:
+   * - Cloud IDEs: Fly.io (`https://app-6137.fly.dev`), Gitpod, GitHub Codespaces
+   * - Docker with port mapping
+   * - Reverse proxy / tunnel (ngrok, cloudflared)
+   *
+   * If provided, it will be used for MCP config auto-update and console output.
+   *
+   * @example "https://my-app-6137.fly.dev"
+   */
+  publicBaseUrl?: string;
+
+  /**
+   * Custom agents configuration
+   * If provided, these will be merged with or replace the default agents
+   * @see AVAILABLE_AGENTS https://github.com/mcpc-tech/dom-inspector-mcp/blob/main/packages/unplugin-dom-inspector/client/constants/agents.ts
+   */
+  agents?: Agent[];
+
+  /**
+   * Custom prompts configuration
+   * @example [{ name: 'debug', description: 'Debug this' }]
+   */
+  prompts?: Prompt[];
+
+  /**
+   * Filter which agents are visible in the UI
+   * Only agents with names in this list will be shown (applies after merging custom agents)
+   * If not specified or empty array, all agents are visible
+   * @example ['Claude Code', 'Gemini CLI', 'My Custom Agent']
+   */
+  visibleAgents?: string[];
+
+  /**
+   * Configure which default built-in prompts to enable.
+   * - `true` (default): Enable all built-in prompts.
+   * - `false`: Disable all built-in prompts.
+   * - `string[]`: Whitelist of specific prompt names to enable.
+   * @default true
+   */
+  defaultPrompts?: boolean | string[];
+
+  /**
+   * Default agent name to use
+   * @default "Claude Code"
+   * @see https://github.com/mcpc-tech/dom-inspector-mcp/blob/main/packages/unplugin-dom-inspector/client/constants/agents.ts
+   */
+  defaultAgent?: string;
+
+  /**
+   * Auto-inject inspector into HTML files
+   * Set to false for non-HTML projects (miniapps, library bundles)
+   * @default true
+   */
+  autoInject?: boolean;
+
+  /**
+   * Custom virtual module name
+   * Useful if the default name conflicts with your project
+   * @default "virtual:dom-inspector-mcp"
+   * @example "virtual:my-inspector" or "virtual:custom-mcp"
+   */
+  virtualModuleName?: string;
+
+  /**
+   * Automatically open browser with Chrome DevTools when dev server starts
+   * Uses Chrome DevTools Protocol for full debugging capabilities (console, network, etc.)
+   * @default false
+   */
+  autoOpenBrowser?: boolean;
+
+  /**
+   * Disable Chrome DevTools integration entirely (chrome_devtools tool + related prompts).
+   * Can also be controlled via DOM_INSPECTOR_DISABLE_CHROME=1
+   * @default true
+   */
+  disableChrome?: boolean;
+
+  /**
+   * Custom browser launch URL
+   * If not specified, uses the MCP server URL (e.g., http://localhost:6137)
+   * @example "http://localhost:3000/dashboard"
+   */
+  browserUrl?: string;
+
+  /**
+   * Whether to show the inspector bar UI
+   * Set to false if you only want to use the editor integration
+   * @default true
+   */
+  showInspectorBar?: boolean;
+
+  /**
+   * Entry file to safely inject the inspector import.
+   * Useful when `autoInject: false` or when using a framework where HTML injection is insufficient.
+   * Can also be set via `DOM_INSPECTOR_ENTRY` environment variable.
+   *
+   * @example "src/main.tsx"
+   */
+  entry?: string;
+}
+
+export type TransformFunction = (
+  code: string,
+  id: string,
+) =>
+  | Promise<string | { code: string; map?: any } | null>
+  | string
+  | { code: string; map?: any }
+  | null;
+
+export const createDomInspectorPlugin = (
+  name: string,
+  transformFactory: (options: DomInspectorOptions) => TransformFunction,
+) => {
+  return createUnplugin<DomInspectorOptions | undefined>((rawOptions = {}) => {
+    // Interpolate environment variables for all options
+    const options = substituteEnvVars(rawOptions);
+    const enabled = options.enabled ?? process.env.NODE_ENV !== "production";
+    const virtualModuleName = options.virtualModuleName ?? "virtual:dom-inspector-mcp";
+    // Alternative module name for Webpack (doesn't support virtual: scheme)
+    const webpackModuleName = virtualModuleName.replace("virtual:", "");
+
+    // Populated by Vite's apply() hook.
+    let viteCommand: "serve" | "build" | undefined;
+
+    // Standalone server instance (shared between Vite and Webpack)
+    let standaloneServerStarted = false;
+    let resolvedHost: string = "localhost";
+    let resolvedPort = options.port || getDefaultPort();
+
+    const transformImpl = transformFactory(options);
+    const chromeDisabled = isChromeDisabled(options.disableChrome);
+
+    // Start standalone server for MCP/Inspector (unified for all bundlers)
+    const ensureStandaloneServer = async (root: string, appUrl?: string) => {
+      if (standaloneServerStarted) return;
+      standaloneServerStarted = true;
+
+      const { server, host, port } = await startStandaloneServer({
+        port: options.port,
+        host: options.host,
+      });
+
+      resolvedHost = host;
+      resolvedPort = port;
+
+      const displayHost = host === "0.0.0.0" ? "localhost" : host;
+      const publicBase = getPublicBaseUrl({
+        publicBaseUrl: options.publicBaseUrl,
+        host: displayHost,
+        port,
+      });
+      const baseUrl = `${publicBase}/__mcp__/sse`;
+      console.log(`[dom-inspector] 📡 MCP: ${baseUrl}\n`);
+
+      const serverContext = {
+        host: resolvedHost,
+        port: resolvedPort,
+        appUrl: appUrl ?? options.browserUrl ?? publicBase,
+        disableChrome: chromeDisabled,
+        prompts: options.prompts,
+        defaultPrompts: options.defaultPrompts,
+      };
+
+      // Initialize console/stdio interception
+      initStdioInterceptor();
+
+      await setupMcpMiddleware(server as unknown as Connect.Server, serverContext);
+
+      setupAcpMiddleware(server as unknown as Connect.Server, serverContext, {
+        acpMode: options.acpMode,
+        acpModel: options.acpModel,
+        acpDelay: options.acpDelay,
+        mcpServers: options.mcpServers,
+      });
+
+      // Auto-update MCP configs
+      await updateMcpConfigs(root, baseUrl, {
+        updateConfig: options.updateConfig,
+        updateConfigServerName: options.updateConfigServerName,
+        updateConfigAdditionalServers: options.updateConfigAdditionalServers,
+        customEditors: options.customEditors,
+      });
+
+      // Auto-open browser with Chrome DevTools
+      const autoOpenBrowser = options.autoOpenBrowser ?? false;
+      if (autoOpenBrowser && !chromeDisabled) {
+        const targetUrl = serverContext.appUrl ?? publicBase;
+        setTimeout(async () => {
+          const success = await launchBrowserWithDevTools({
+            url: targetUrl,
+            serverContext,
+          });
+          if (success) {
+            console.log(`[dom-inspector] 🌐 Browser opened: ${targetUrl}`);
+          } else {
+            console.log(
+              `[dom-inspector] 💡 Use "launch_chrome_devtools" prompt to open browser manually.\n`,
+            );
+          }
+        }, 1000);
+      } else if (chromeDisabled) {
+        console.log(
+          `[dom-inspector] 📴 Chrome integration disabled (DOM_INSPECTOR_DISABLE_CHROME=1 or disableChrome: true)`,
+        );
+      } else {
+        console.log(
+          `[dom-inspector] ⚠️  autoOpenBrowser: false - Console/Network context unavailable`,
+        );
+        console.log(
+          `[dom-inspector] 💡 Use "launch_chrome_devtools" prompt or "chrome_devtools" tool to open browser manually.\n`,
+        );
+      }
+
+      setupInspectorMiddleware(server as unknown as Connect.Server, {
+        ...options,
+        defaultPrompts: options.defaultPrompts ?? true,
+      });
+    };
+
+    // Resolve entry file for auto-injection
+    const entryOption = process.env.DOM_INSPECTOR_ENTRY || options.entry;
+    const resolvedEntry = entryOption ? path.resolve(process.cwd(), entryOption) : null;
+
+    const transform: TransformFunction = (code, id) => {
+      // Never transform production builds.
+      if (!enabled) return null;
+      if (viteCommand && viteCommand !== "serve") return null;
+
+      // Auto-inject import if this is the entry file
+      if (resolvedEntry && id === resolvedEntry) {
+        // Prepend the import
+        const injection = `import '${virtualModuleName}';\n`;
+        // Pass modified code to transformImpl or return it
+        const result = transformImpl(code, id);
+        if (typeof result === "string") {
+          return injection + result;
+        } else if (result && typeof result === "object" && "code" in result) {
+          return { ...result, code: injection + result.code };
+        } else {
+          return injection + code;
+        }
+      }
+
+      return transformImpl(code, id);
+    };
+
+    const createNoopVirtualModule = () => {
+      // Keep this file side-effect free so a bare import can be tree-shaken.
+      return `
+// Production build - no-op
+export function registerInspectorTool(_tool) {
+  // No-op in production
+}
+`;
+    };
+
+    return {
+      name,
+      enforce: "pre",
+
+      resolveId(id) {
+        // Support both 'virtual:dom-inspector-mcp' (Vite) and 'dom-inspector-mcp' (Webpack)
+        if (id === virtualModuleName || id === webpackModuleName) {
+          return "\0" + virtualModuleName;
+        }
+      },
+
+      load(id) {
+        if (id === "\0" + virtualModuleName) {
+          // During production builds (or when disabled), provide a no-op module so
+          // builds never fail even if user code still imports the virtual module.
+          if (!enabled || viteCommand === "build") {
+            return createNoopVirtualModule();
+          }
+
+          // Use resolved host/port from standalone server
+          // Use 'localhost' instead of '0.0.0.0' for client-side URLs to prevent Mixed Content errors
+          const host = resolvedHost === "0.0.0.0" ? "localhost" : resolvedHost;
+          const port = resolvedPort;
+          const showInspectorBar = options.showInspectorBar ?? true;
+          // Use helper to respect Env > Option priority
+          const publicBaseUrl = getPublicBaseUrl({
+            publicBaseUrl: options.publicBaseUrl,
+            host,
+            port,
+          });
+          const injectedBaseUrl = publicBaseUrl ? stripTrailingSlash(publicBaseUrl) : undefined;
+
+          // Return dev-only code that works in both Vite and Webpack
+          // Uses typeof check to avoid SSR issues and works with both bundlers
+          return `
+// Development-only code - removed in production builds
+
+// Global tools registry
+if (typeof window !== 'undefined') {
+  if (!window.__INSPECTOR_TOOLS__) {
+    window.__INSPECTOR_TOOLS__ = [];
+  }
+  // Exposed for the inspector client to retrieve tools
+  window.__getInspectorTools = () => window.__INSPECTOR_TOOLS__;
+}
+
+/**
+ * Register a custom tool for the inspector
+ * Only registers in development mode
+ */
+export function registerInspectorTool(tool) {
+  // Skip in production (when bundler replaces import.meta.env.DEV with false)
+  if (!import.meta.env.DEV) return;
+  if (typeof window === 'undefined') return;
+  
+  window.__INSPECTOR_TOOLS__ = window.__INSPECTOR_TOOLS__ || [];
+  window.__INSPECTOR_TOOLS__.push(tool);
+}
+
+if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+  // Skip if already loaded (e.g., by HTML injection)
+  if (window.__DOM_INSPECTOR_LOADED__) {
+    // Already initialized, skip
+  } else {
+    window.__DOM_INSPECTOR_LOADED__ = true;
+    
+    // Create inspector element
+    const inspector = document.createElement('dom-inspector-mcp');
+    document.body.appendChild(inspector);
+
+    // Store dev server config globally
+    window.__DOM_INSPECTOR_CONFIG__ = {
+      host: '${host}',
+      port: '${port}',
+      base: '/',
+      baseUrl: ${injectedBaseUrl ? `'${injectedBaseUrl.replace(/'/g, "\\'")}'` : "undefined"},
+      showInspectorBar: ${showInspectorBar},
+      disableChrome: ${chromeDisabled}
+    };
+
+    // Dynamically load inspector script
+    const script = document.createElement('script');
+    const config = window.__DOM_INSPECTOR_CONFIG__;
+    let baseUrl = config.baseUrl || ('http://' + config.host + ':' + config.port + config.base);
+    if (baseUrl.endsWith('/')) baseUrl = baseUrl.slice(0, -1);
+    script.src = baseUrl + '/__inspector__/inspector.js';
+    script.type = 'module';
+    document.head.appendChild(script);
+  }
+}
+`;
+        }
+      },
+
+      transform,
+
+      // Vite-specific hooks
+      vite: {
+        apply(_config, env) {
+          viteCommand = env.command;
+          return true;
+        },
+
+        transformIndexHtml: {
+          order: "pre",
+          handler(html, ctx) {
+            if (!enabled) return html;
+            if (viteCommand !== "serve") return html;
+            const autoInject = options.autoInject ?? true;
+            if (!autoInject) return html;
+
+            // Use standalone server's resolved host/port
+            const host = resolvedHost === "0.0.0.0" ? "localhost" : resolvedHost;
+            const port = resolvedPort;
+            const base = ctx.server?.config.base ?? "/";
+            const showInspectorBar = options.showInspectorBar ?? true;
+            const publicBaseUrl = getPublicBaseUrl({
+              publicBaseUrl: options.publicBaseUrl,
+              host,
+              port,
+            });
+
+            return html.replace(
+              "</body>",
+              `<dom-inspector-mcp></dom-inspector-mcp><script>
+(function() {
+  if (!window.__DOM_INSPECTOR_LOADED__) {
+    window.__DOM_INSPECTOR_LOADED__ = true;
+    window.__DOM_INSPECTOR_CONFIG__ = {
+      host: '${host}',
+      port: '${port}',
+      base: '${base}',
+      baseUrl: ${publicBaseUrl ? `'${publicBaseUrl.replace(/'/g, "\\'")}'` : "undefined"},
+      showInspectorBar: ${showInspectorBar},
+      disableChrome: ${chromeDisabled}
+    };
+    var script = document.createElement('script');
+    var config = window.__DOM_INSPECTOR_CONFIG__;
+    var baseUrl = config.baseUrl || ('http://' + config.host + ':' + config.port + (config.base || '/'));
+    if (baseUrl.endsWith('/')) baseUrl = baseUrl.slice(0, -1);
+    script.src = baseUrl + '/__inspector__/inspector.js';
+    script.type = 'module';
+    document.head.appendChild(script);
+  }
+})();
+</script></body>`,
+            );
+          },
+        },
+
+        async configureServer(server) {
+          if (!enabled) return;
+
+          // Derive app URL from vite server config (port defaults to 5173)
+          const vitePort = server.config.server.port ?? 5173;
+          const viteHost =
+            typeof server.config.server.host === "string" ? server.config.server.host : "localhost";
+          const appUrl =
+            options.browserUrl ??
+            `http://${viteHost === "0.0.0.0" ? "localhost" : viteHost}:${vitePort}`;
+
+          // Start standalone server for MCP/Inspector
+          await ensureStandaloneServer(server.config.root, appUrl);
+        },
+      },
+
+      // Webpack-specific hooks
+      webpack(compiler) {
+        if (!enabled) return;
+        if (compiler.options.mode !== "development") return;
+
+        compiler.hooks.beforeCompile.tapAsync(
+          "UnpluginDomInspector",
+          async (_params: unknown, callback: () => void) => {
+            try {
+              await ensureStandaloneServer(compiler.context);
+              callback();
+            } catch (e) {
+              console.error("[dom-inspector] Failed to start standalone server:", e);
+              callback();
+            }
+          },
+        );
+      },
+    };
+  });
+};

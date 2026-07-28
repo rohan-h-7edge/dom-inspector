@@ -1,0 +1,28 @@
+# dom-inspector-mcp
+
+An npm workspace with two packages:
+
+- **`packages/dom-inspector`** — the core unplugin package: a bundler plugin (Vite/Webpack/Rollup/esbuild/Next.js) that instruments React/Vue components for source inspection, plus an embedded MCP server and a browser-side inspector UI/client. This is the actual DOM inspection and MCP tooling logic.
+- **`packages/dynamic-island-app`** — an Electron floating status-bar app ("dynamic island") that spawns the `dom-inspector` package's CLI as a subprocess and shows an always-on-top window reflecting agent/tool activity. Ported faithfully; its UI is expected to be redesigned later.
+
+## Build
+
+```bash
+npm install
+npm run build
+```
+
+This runs each package's own `build` script (see `packages/dom-inspector/package.json` and `packages/dynamic-island-app/package.json`).
+
+## Develop
+
+```bash
+npm run dev
+```
+
+Runs both packages' `dev` scripts (sequentially).
+
+## Notes
+
+This project was ported from a prior "dev-inspector" monorepo, dropping examples, docs, and CI scaffolding, and rebranding all `dev-inspector`/`DevInspector` identifiers to `dom-inspector`/`DomInspector` (env vars, CLI bin names, virtual module names, etc.).
+# dom-inspector

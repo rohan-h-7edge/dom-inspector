@@ -31,6 +31,36 @@ interface ContextDialogProps {
 
 type TabType = "inspections" | "console" | "network" | "stdio" | "page";
 
+// Matches ContextPicker's TAB_ACCENTS palette for the shared tab ids
+// (console/network/page/stdio), plus "inspections" for this dialog's own tab.
+const TAB_ACCENTS: Record<TabType, { text: string; gradient: string; badge: string }> = {
+  inspections: {
+    text: "text-fuchsia-500 dark:text-fuchsia-400",
+    gradient: "from-violet-600 to-fuchsia-500",
+    badge: "bg-fuchsia-500",
+  },
+  console: {
+    text: "text-emerald-500 dark:text-emerald-400",
+    gradient: "from-emerald-500 to-teal-500",
+    badge: "bg-emerald-500",
+  },
+  network: {
+    text: "text-blue-500 dark:text-blue-400",
+    gradient: "from-blue-500 to-cyan-500",
+    badge: "bg-blue-500",
+  },
+  page: {
+    text: "text-cyan-500 dark:text-cyan-400",
+    gradient: "from-cyan-500 to-sky-500",
+    badge: "bg-cyan-500",
+  },
+  stdio: {
+    text: "text-violet-500 dark:text-violet-400",
+    gradient: "from-violet-500 to-purple-500",
+    badge: "bg-violet-500",
+  },
+};
+
 // Network request item component with expandable details
 const NetworkRequestItem: React.FC<{
   request: NetworkRequest;
@@ -120,7 +150,7 @@ const NetworkRequestItem: React.FC<{
       case "PATCH":
         return "bg-purple-500/20 text-purple-500";
       default:
-        return "bg-muted text-muted-foreground";
+        return "bg-neutral-100 dark:bg-white/[0.06] border border-neutral-200 dark:border-white/10 text-neutral-500 dark:text-neutral-400";
     }
   };
 
@@ -136,13 +166,13 @@ const NetworkRequestItem: React.FC<{
     if (status.includes("success")) return "text-green-600";
     if (status.includes("failed")) return "text-red-500";
     if (status.includes("pending")) return "text-yellow-600";
-    return "text-muted-foreground";
+    return "text-neutral-500 dark:text-neutral-400";
   };
 
   const renderDetails = () => {
     if (loadingDetails) {
       return (
-        <div className="flex items-center gap-2 py-2 text-sm text-muted-foreground">
+        <div className="flex items-center gap-2 py-2 text-sm text-neutral-500 dark:text-neutral-400">
           <Loader2 className="w-4 h-4 animate-spin" />
           Loading...
         </div>
@@ -192,20 +222,20 @@ ${details}
     }
 
     return (
-      <div className="text-xs text-foreground/90 bg-background/50 p-3 rounded overflow-x-auto max-h-[400px] overflow-y-auto border border-border">
+      <div className="text-xs text-neutral-900 dark:text-neutral-100 bg-neutral-100 dark:bg-white/[0.06] border border-neutral-200 dark:border-white/10 p-3 rounded overflow-x-auto max-h-[400px] overflow-y-auto">
         <MessageResponse>{markdownContent}</MessageResponse>
       </div>
     );
   };
 
   return (
-    <div className="rounded-md bg-muted/50 hover:bg-muted/70 transition-colors overflow-hidden">
+    <div className="rounded-md bg-neutral-100 dark:bg-white/[0.06] border border-neutral-200 dark:border-white/10 hover:bg-neutral-200 dark:hover:bg-white/[0.1] transition-colors overflow-hidden">
       <button onClick={handleToggle} className="w-full p-3 text-left flex items-start gap-3">
         <span className="mt-0.5 flex-shrink-0">
           {isExpanded ? (
-            <ChevronDown className="w-4 h-4 text-muted-foreground" />
+            <ChevronDown className="w-4 h-4 text-neutral-500 dark:text-neutral-400" />
           ) : (
-            <ChevronRight className="w-4 h-4 text-muted-foreground" />
+            <ChevronRight className="w-4 h-4 text-neutral-500 dark:text-neutral-400" />
           )}
         </span>
         <span
@@ -217,7 +247,7 @@ ${details}
           {request.method}
         </span>
         <div className="flex-1 min-w-0 overflow-hidden">
-          <div className="text-sm text-foreground font-mono truncate" title={request.url}>
+          <div className="text-sm text-neutral-900 dark:text-neutral-50 font-mono truncate" title={request.url}>
             {request.url}
           </div>
           <div className={cn("text-xs mt-1", getStatusColor(request.status))}>
@@ -375,7 +405,12 @@ export const ContextDialog: React.FC<ContextDialogProps> = ({
                 type="button"
                 onClick={handleCopy}
                 disabled={loading}
-                className="flex items-center gap-1.5 px-2 h-8 text-xs border border-border bg-background hover:bg-accent rounded-md transition-colors disabled:opacity-50"
+                className={cn(
+                  "flex items-center gap-1.5 px-3 h-8 text-xs font-semibold rounded-full transition-all disabled:opacity-50 text-white shadow-sm",
+                  copied
+                    ? "bg-emerald-500 shadow-emerald-500/30"
+                    : "bg-linear-to-r from-violet-600 via-fuchsia-500 to-pink-500 shadow-fuchsia-500/30 hover:shadow-md hover:shadow-fuchsia-500/40 hover:scale-[1.03]",
+                )}
                 title={
                   getTotalSelectedCount() > 0
                     ? `Copy ${getTotalSelectedCount()} selected items`
@@ -383,7 +418,7 @@ export const ContextDialog: React.FC<ContextDialogProps> = ({
                 }
               >
                 {copied ? (
-                  <Check className="w-3.5 h-3.5 text-green-500" />
+                  <Check className="w-3.5 h-3.5" />
                 ) : (
                   <Copy className="w-3.5 h-3.5" />
                 )}
@@ -395,7 +430,7 @@ export const ContextDialog: React.FC<ContextDialogProps> = ({
                 type="button"
                 onClick={() => refresh()}
                 disabled={loading}
-                className="flex items-center justify-center w-8 h-8 text-sm border border-border bg-background hover:bg-accent rounded-md transition-colors disabled:opacity-50"
+                className="flex items-center justify-center w-8 h-8 text-sm text-neutral-600 dark:text-neutral-300 border border-neutral-200 dark:border-white/15 bg-neutral-100 dark:bg-white/10 hover:bg-neutral-200 dark:hover:bg-white/20 hover:text-neutral-900 dark:hover:text-white rounded-md transition-colors disabled:opacity-50"
                 title="Refresh Data"
               >
                 <RefreshCw className={cn("w-3.5 h-3.5", loading && "animate-spin")} />
@@ -405,35 +440,46 @@ export const ContextDialog: React.FC<ContextDialogProps> = ({
         </DialogHeader>
 
         {/* Tabs */}
-        <div className="flex gap-1 border-b border-border flex-shrink-0">
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={cn(
-                "px-4 py-2 text-sm font-medium transition-colors relative",
-                activeTab === tab.id
-                  ? "text-foreground"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {tab.label}
-              {tab.count !== undefined && tab.count > 0 && (
-                <span className="ml-2 px-1.5 py-0.5 text-xs bg-muted rounded-full">
-                  {tab.count}
-                </span>
-              )}
-              {activeTab === tab.id && (
-                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-foreground" />
-              )}
-            </button>
-          ))}
+        <div className="flex gap-1 border-b border-neutral-200 dark:border-neutral-700 flex-shrink-0">
+          {tabs.map((tab) => {
+            const accent = TAB_ACCENTS[tab.id];
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={cn(
+                  "px-4 py-2 text-sm font-medium transition-colors relative",
+                  activeTab === tab.id ? accent.text : "text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-50",
+                )}
+              >
+                {tab.label}
+                {tab.count !== undefined && tab.count > 0 && (
+                  <span
+                    className={cn(
+                      "ml-2 px-1.5 py-0.5 text-xs font-medium text-white rounded-full",
+                      accent.badge,
+                    )}
+                  >
+                    {tab.count}
+                  </span>
+                )}
+                {activeTab === tab.id && (
+                  <div
+                    className={cn(
+                      "absolute bottom-0 left-0 right-0 h-0.5 bg-linear-to-r",
+                      accent.gradient,
+                    )}
+                  />
+                )}
+              </button>
+            );
+          })}
         </div>
 
         {/* Tab Content */}
         <div className="flex-1 overflow-auto min-h-0">
           {error && (
-            <div className="flex items-center gap-2 p-4 text-sm text-destructive bg-destructive/10 rounded-md m-4">
+            <div className="flex items-center gap-2 p-4 text-sm text-red-600 dark:text-red-400 bg-red-500/10 rounded-md m-4">
               <AlertCircle className="w-4 h-4 flex-shrink-0" />
               <span className="break-all">{error}</span>
             </div>
@@ -442,7 +488,7 @@ export const ContextDialog: React.FC<ContextDialogProps> = ({
           {activeTab === "inspections" && (
             <div className="h-full overflow-auto">
               {inspectionItems.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+                <div className="flex flex-col items-center justify-center py-12 text-neutral-500 dark:text-neutral-400">
                   <p className="text-sm">No inspections</p>
                   <p className="text-xs mt-1">Use ⌥I to inspect elements</p>
                 </div>
@@ -456,19 +502,19 @@ export const ContextDialog: React.FC<ContextDialogProps> = ({
             <div className="p-4 space-y-2 h-full overflow-auto">
               {/* Search Input */}
               <div className="relative mb-2">
-                <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-neutral-500 dark:text-neutral-400" />
                 <input
                   type="text"
                   value={consoleSearch}
                   onChange={(e) => setConsoleSearch(e.target.value)}
                   placeholder="Filter logs..."
-                  className="w-full pl-7 pr-7 py-1.5 text-xs rounded border border-border bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+                  className="w-full pl-7 pr-7 py-1.5 text-xs rounded border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 focus:outline-none focus:ring-1 focus:ring-ring"
                 />
                 {consoleSearch && (
                   <button
                     type="button"
                     onClick={() => setConsoleSearch("")}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-50"
                   >
                     <X className="w-3.5 h-3.5" />
                   </button>
@@ -476,11 +522,11 @@ export const ContextDialog: React.FC<ContextDialogProps> = ({
               </div>
               {loading && (
                 <div className="flex items-center justify-center py-12">
-                  <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                  <Loader2 className="w-6 h-6 animate-spin text-neutral-500 dark:text-neutral-400" />
                 </div>
               )}
               {!loading && filteredConsole.length === 0 && (
-                <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+                <div className="flex flex-col items-center justify-center py-12 text-neutral-500 dark:text-neutral-400">
                   <p className="text-sm">
                     {consoleSearch ? "No matching logs" : "No console logs"}
                   </p>
@@ -490,13 +536,13 @@ export const ContextDialog: React.FC<ContextDialogProps> = ({
                 filteredConsole.map((msg) => (
                   <label
                     key={msg.msgid}
-                    className="flex items-start gap-2 p-3 rounded-md bg-muted/50 hover:bg-muted transition-colors cursor-pointer"
+                    className="flex items-start gap-2 p-3 rounded-md bg-neutral-100 dark:bg-white/[0.06] border border-neutral-200 dark:border-white/10 hover:bg-neutral-200 dark:hover:bg-white/[0.1] transition-colors cursor-pointer"
                   >
                     <input
                       type="checkbox"
                       checked={selectedConsoleIds.has(msg.msgid)}
                       onChange={() => toggleSelection(msg.msgid, setSelectedConsoleIds)}
-                      className="mt-0.5 rounded border-border"
+                      className="mt-0.5 rounded border-neutral-200 dark:border-neutral-700"
                     />
                     <span
                       className={cn(
@@ -504,13 +550,13 @@ export const ContextDialog: React.FC<ContextDialogProps> = ({
                         msg.level === "error" && "bg-red-500/20 text-red-500",
                         msg.level === "warn" && "bg-yellow-500/20 text-yellow-600",
                         msg.level === "info" && "bg-blue-500/20 text-blue-500",
-                        msg.level === "log" && "bg-muted text-muted-foreground",
+                        msg.level === "log" && "bg-neutral-100 dark:bg-white/[0.06] border border-neutral-200 dark:border-white/10 text-neutral-500 dark:text-neutral-400",
                         msg.level === "debug" && "bg-purple-500/20 text-purple-500",
                       )}
                     >
                       {msg.level}
                     </span>
-                    <span className="text-sm text-foreground/90 flex-1 font-mono break-all overflow-hidden">
+                    <span className="text-sm text-neutral-900 dark:text-neutral-100 flex-1 font-mono break-all overflow-hidden">
                       {msg.text}
                     </span>
                   </label>
@@ -522,19 +568,19 @@ export const ContextDialog: React.FC<ContextDialogProps> = ({
             <div className="p-4 space-y-2 h-full overflow-auto">
               {/* Search Input */}
               <div className="relative mb-2">
-                <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-neutral-500 dark:text-neutral-400" />
                 <input
                   type="text"
                   value={networkSearch}
                   onChange={(e) => setNetworkSearch(e.target.value)}
                   placeholder="Filter requests..."
-                  className="w-full pl-7 pr-7 py-1.5 text-xs rounded border border-border bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+                  className="w-full pl-7 pr-7 py-1.5 text-xs rounded border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 focus:outline-none focus:ring-1 focus:ring-ring"
                 />
                 {networkSearch && (
                   <button
                     type="button"
                     onClick={() => setNetworkSearch("")}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-50"
                   >
                     <X className="w-3.5 h-3.5" />
                   </button>
@@ -542,11 +588,11 @@ export const ContextDialog: React.FC<ContextDialogProps> = ({
               </div>
               {loading && (
                 <div className="flex items-center justify-center py-12">
-                  <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                  <Loader2 className="w-6 h-6 animate-spin text-neutral-500 dark:text-neutral-400" />
                 </div>
               )}
               {!loading && filteredNetwork.length === 0 && (
-                <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+                <div className="flex flex-col items-center justify-center py-12 text-neutral-500 dark:text-neutral-400">
                   <p className="text-sm">
                     {networkSearch ? "No matching requests" : "No network requests"}
                   </p>
@@ -559,7 +605,7 @@ export const ContextDialog: React.FC<ContextDialogProps> = ({
                       type="checkbox"
                       checked={selectedNetworkIds.has(req.reqid)}
                       onChange={() => toggleSelection(req.reqid, setSelectedNetworkIds)}
-                      className="mt-3 rounded border-border flex-shrink-0"
+                      className="mt-3 rounded border-neutral-200 dark:border-neutral-700 flex-shrink-0"
                     />
                     <div className="flex-1 min-w-0">
                       <NetworkRequestItem
@@ -577,19 +623,19 @@ export const ContextDialog: React.FC<ContextDialogProps> = ({
             <div className="p-4 space-y-2 h-full overflow-auto">
               {/* Search Input */}
               <div className="relative mb-2">
-                <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-neutral-500 dark:text-neutral-400" />
                 <input
                   type="text"
                   value={stdioSearch}
                   onChange={(e) => setStdioSearch(e.target.value)}
                   placeholder="Filter terminal..."
-                  className="w-full pl-7 pr-7 py-1.5 text-xs rounded border border-border bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+                  className="w-full pl-7 pr-7 py-1.5 text-xs rounded border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 focus:outline-none focus:ring-1 focus:ring-ring"
                 />
                 {stdioSearch && (
                   <button
                     type="button"
                     onClick={() => setStdioSearch("")}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-50"
                   >
                     <X className="w-3.5 h-3.5" />
                   </button>
@@ -597,11 +643,11 @@ export const ContextDialog: React.FC<ContextDialogProps> = ({
               </div>
               {loading && (
                 <div className="flex items-center justify-center py-12">
-                  <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                  <Loader2 className="w-6 h-6 animate-spin text-neutral-500 dark:text-neutral-400" />
                 </div>
               )}
               {!loading && filteredStdio.length === 0 && (
-                <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+                <div className="flex flex-col items-center justify-center py-12 text-neutral-500 dark:text-neutral-400">
                   <p className="text-sm">
                     {stdioSearch ? "No matching messages" : "No terminal messages"}
                   </p>
@@ -611,13 +657,13 @@ export const ContextDialog: React.FC<ContextDialogProps> = ({
                 filteredStdio.map((msg) => (
                   <label
                     key={msg.stdioid}
-                    className="flex items-start gap-2 p-3 rounded-md bg-muted/50 hover:bg-muted transition-colors cursor-pointer"
+                    className="flex items-start gap-2 p-3 rounded-md bg-neutral-100 dark:bg-white/[0.06] border border-neutral-200 dark:border-white/10 hover:bg-neutral-200 dark:hover:bg-white/[0.1] transition-colors cursor-pointer"
                   >
                     <input
                       type="checkbox"
                       checked={selectedStdioIds.has(msg.stdioid)}
                       onChange={() => toggleSelection(msg.stdioid, setSelectedStdioIds)}
-                      className="mt-0.5 rounded border-border"
+                      className="mt-0.5 rounded border-neutral-200 dark:border-neutral-700"
                     />
                     <span
                       className={cn(
@@ -629,7 +675,7 @@ export const ContextDialog: React.FC<ContextDialogProps> = ({
                     >
                       {msg.stream}
                     </span>
-                    <pre className="text-sm text-foreground/90 flex-1 font-mono break-all overflow-hidden whitespace-pre-wrap">
+                    <pre className="text-sm text-neutral-900 dark:text-neutral-100 flex-1 font-mono break-all overflow-hidden whitespace-pre-wrap">
                       {msg.data}
                     </pre>
                   </label>
@@ -641,37 +687,37 @@ export const ContextDialog: React.FC<ContextDialogProps> = ({
             <div className="p-4 h-full overflow-auto">
               {!pageInfo ? (
                 <div className="flex items-center justify-center py-12">
-                  <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                  <Loader2 className="w-6 h-6 animate-spin text-neutral-500 dark:text-neutral-400" />
                 </div>
               ) : (
                 <div className="space-y-4">
-                  <div className="flex items-start gap-3 p-3 rounded-md bg-muted/50">
+                  <div className="flex items-start gap-3 p-3 rounded-md bg-neutral-100 dark:bg-white/[0.06] border border-neutral-200 dark:border-white/10">
                     <Globe className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
                     <div className="flex-1 min-w-0 space-y-3">
                       <div>
-                        <div className="text-xs font-medium text-muted-foreground mb-1">URL</div>
-                        <div className="text-sm text-foreground font-mono break-all">
+                        <div className="text-xs font-medium text-neutral-500 dark:text-neutral-400 mb-1">URL</div>
+                        <div className="text-sm text-neutral-900 dark:text-neutral-50 font-mono break-all">
                           {pageInfo.url}
                         </div>
                       </div>
                       <div>
-                        <div className="text-xs font-medium text-muted-foreground mb-1">Title</div>
-                        <div className="text-sm text-foreground">{pageInfo.title}</div>
+                        <div className="text-xs font-medium text-neutral-500 dark:text-neutral-400 mb-1">Title</div>
+                        <div className="text-sm text-neutral-900 dark:text-neutral-50">{pageInfo.title}</div>
                       </div>
                       <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <div className="text-xs font-medium text-muted-foreground mb-1">
+                          <div className="text-xs font-medium text-neutral-500 dark:text-neutral-400 mb-1">
                             Viewport
                           </div>
-                          <div className="text-sm text-foreground">
+                          <div className="text-sm text-neutral-900 dark:text-neutral-50">
                             {pageInfo.viewport.width} × {pageInfo.viewport.height}
                           </div>
                         </div>
                         <div>
-                          <div className="text-xs font-medium text-muted-foreground mb-1">
+                          <div className="text-xs font-medium text-neutral-500 dark:text-neutral-400 mb-1">
                             Language
                           </div>
-                          <div className="text-sm text-foreground">{pageInfo.language}</div>
+                          <div className="text-sm text-neutral-900 dark:text-neutral-50">{pageInfo.language}</div>
                         </div>
                       </div>
                     </div>

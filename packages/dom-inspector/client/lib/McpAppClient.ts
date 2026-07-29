@@ -207,4 +207,12 @@ export class McpAppClient extends Protocol<any, any, any> {
   assertNotificationCapability(method: string): void {
     // Allow all notifications
   }
+
+  assertTaskCapability(method: string): void {
+    // Allow all tasks
+  }
+
+  assertTaskHandlerCapability(method: string): void {
+    // Allow all task handlers
+  }
 }

@@ -119,31 +119,84 @@ interface TabConfig {
   totalCount?: number;
 }
 
+// Each tab gets its own accent so the panel reads as a set of distinct data
+// sources rather than one flat list — active-state text/underline/badge all
+// key off this.
+export const TAB_ACCENTS: Record<TabType, { text: string; gradient: string; badge: string }> = {
+  code: {
+    text: "text-indigo-500 dark:text-indigo-400",
+    gradient: "from-indigo-500 to-violet-500",
+    badge: "bg-indigo-500",
+  },
+  styles: {
+    text: "text-fuchsia-500 dark:text-fuchsia-400",
+    gradient: "from-fuchsia-500 to-pink-500",
+    badge: "bg-fuchsia-500",
+  },
+  page: {
+    text: "text-cyan-500 dark:text-cyan-400",
+    gradient: "from-cyan-500 to-sky-500",
+    badge: "bg-cyan-500",
+  },
+  screenshot: {
+    text: "text-amber-500 dark:text-amber-400",
+    gradient: "from-amber-500 to-orange-500",
+    badge: "bg-amber-500",
+  },
+  console: {
+    text: "text-emerald-500 dark:text-emerald-400",
+    gradient: "from-emerald-500 to-teal-500",
+    badge: "bg-emerald-500",
+  },
+  network: {
+    text: "text-blue-500 dark:text-blue-400",
+    gradient: "from-blue-500 to-cyan-500",
+    badge: "bg-blue-500",
+  },
+  stdio: {
+    text: "text-violet-500 dark:text-violet-400",
+    gradient: "from-violet-500 to-purple-500",
+    badge: "bg-violet-500",
+  },
+};
+
 const TabButton: React.FC<{
   tab: TabConfig;
   isActive: boolean;
   onClick: () => void;
-}> = ({ tab, isActive, onClick }) => (
-  <button
-    type="button"
-    onClick={onClick}
-    className={cn(
-      "px-3 py-1.5 text-xs font-medium transition-colors relative whitespace-nowrap inline-flex items-center",
-      isActive ? "text-foreground" : "text-muted-foreground hover:text-foreground",
-    )}
-  >
-    {tab.label}
-    {tab.totalCount !== undefined && tab.totalCount > 0 && (
-      <span className="ml-1 text-xs text-muted-foreground">({tab.totalCount})</span>
-    )}
-    {tab.selectedCount !== undefined && tab.selectedCount > 0 && (
-      <span className="ml-1.5 inline-flex items-center justify-center min-w-[16px] h-4 px-1 text-[10px] font-medium bg-primary text-primary-foreground rounded-full">
-        {tab.selectedCount}
-      </span>
-    )}
-    {isActive && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-foreground" />}
-  </button>
-);
+}> = ({ tab, isActive, onClick }) => {
+  const accent = TAB_ACCENTS[tab.id];
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "px-3 py-1.5 text-xs font-medium transition-colors relative whitespace-nowrap inline-flex items-center",
+        isActive ? accent.text : "text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-50",
+      )}
+    >
+      {tab.label}
+      {tab.totalCount !== undefined && tab.totalCount > 0 && (
+        <span className="ml-1 text-xs text-neutral-500 dark:text-neutral-400">({tab.totalCount})</span>
+      )}
+      {tab.selectedCount !== undefined && tab.selectedCount > 0 && (
+        <span
+          className={cn(
+            "ml-1.5 inline-flex items-center justify-center min-w-4 h-4 px-1 text-[10px] font-medium text-white rounded-full",
+            accent.badge,
+          )}
+        >
+          {tab.selectedCount}
+        </span>
+      )}
+      {isActive && (
+        <div
+          className={cn("absolute bottom-0 left-0 right-0 h-0.5 bg-linear-to-r", accent.gradient)}
+        />
+      )}
+    </button>
+  );
+};
 
 export const ContextPicker: React.FC<ContextPickerProps> = ({
   client,
@@ -385,7 +438,7 @@ IMPORTANT: For this task, you MUST call the "context_selector" tool to return yo
       case "debug":
         return "bg-purple-500/20 text-purple-500";
       default:
-        return "bg-muted text-muted-foreground";
+        return "bg-neutral-100 dark:bg-white/[0.06] border border-neutral-200 dark:border-white/10 text-neutral-500 dark:text-neutral-400";
     }
   };
 
@@ -419,14 +472,14 @@ IMPORTANT: For this task, you MUST call the "context_selector" tool to return yo
   ];
 
   return (
-    <div className="border border-border rounded-md overflow-hidden">
+    <div className="border border-neutral-200 dark:border-neutral-700 rounded-md overflow-hidden">
       {/* Collapse Header */}
       {/* Header */}
-      <div className="w-full flex items-center justify-between px-3 py-2 text-sm bg-muted/30 border-b border-border">
-        <div className="flex items-center gap-2 text-muted-foreground font-medium">
+      <div className="w-full flex items-center justify-between px-3 py-2 text-sm bg-linear-to-r from-muted/50 via-muted/30 to-muted/50 border-b border-neutral-200 dark:border-neutral-700">
+        <div className="flex items-center gap-2 text-neutral-500 dark:text-neutral-400 font-medium">
           <span>Context</span>
           {totalSelected > 0 && (
-            <span className="px-1.5 py-0.5 text-xs bg-primary text-primary-foreground rounded-full">
+            <span className="px-1.5 py-0.5 text-xs font-semibold text-white bg-linear-to-r from-indigo-500 to-fuchsia-500 rounded-full shadow-sm shadow-fuchsia-500/30">
               {totalSelected}
             </span>
           )}
@@ -440,10 +493,10 @@ IMPORTANT: For this task, you MUST call the "context_selector" tool to return yo
             }}
             disabled={loading || isProcessing}
             className={cn(
-              "flex items-center gap-1.5 px-2 py-1 text-xs font-medium rounded transition-colors border shadow-sm",
+              "flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-full text-white transition-all shadow-sm",
               isProcessing
-                ? "bg-blue-100 text-blue-700 border-blue-200"
-                : "bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-100 hover:text-blue-700 hover:border-blue-300",
+                ? "bg-linear-to-r from-violet-500 to-fuchsia-500 shadow-fuchsia-500/30"
+                : "bg-linear-to-r from-violet-600 via-fuchsia-500 to-pink-500 shadow-fuchsia-500/30 hover:shadow-md hover:shadow-fuchsia-500/40 hover:scale-[1.03]",
             )}
             title="Let AI analyze logs and network to select relevant context"
           >
@@ -457,7 +510,7 @@ IMPORTANT: For this task, you MUST call the "context_selector" tool to return yo
               refresh();
             }}
             disabled={loading}
-            className="p-1 hover:bg-accent rounded transition-colors"
+            className="p-1 hover:bg-neutral-100 dark:hover:bg-neutral-700 rounded transition-colors"
             title="Refresh"
           >
             <RefreshCw className={cn("w-3.5 h-3.5", loading && "animate-spin")} />
@@ -468,7 +521,7 @@ IMPORTANT: For this task, you MUST call the "context_selector" tool to return yo
       {/* Content */}
       <div>
         {/* Tabs - KISS: data-driven rendering */}
-        <div className="flex gap-1 border-b border-border px-2 pt-1">
+        <div className="flex gap-1 border-b border-neutral-200 dark:border-neutral-700 px-2 pt-1">
           {tabs.map((tab) => (
             <TabButton
               key={tab.id}
@@ -481,7 +534,7 @@ IMPORTANT: For this task, you MUST call the "context_selector" tool to return yo
 
         {/* Tab Content */}
         <div
-          className={`max-h-[200px] overflow-auto relative ${isProcessing ? "min-h-[150px]" : ""}`}
+          className={`max-h-50 overflow-auto relative ${isProcessing ? "min-h-37.5" : ""}`}
         >
           {isProcessing &&
             (() => {
@@ -491,13 +544,13 @@ IMPORTANT: For this task, you MUST call the "context_selector" tool to return yo
                 lastMsg?.role === "assistant" ? extractLatestToolName(lastMsg) : null;
 
               return (
-                <div className="absolute inset-0 z-10 bg-background/95 backdrop-blur-sm flex flex-col items-center justify-center p-4 min-h-[120px]">
+                <div className="absolute inset-0 z-10 bg-white/95 dark:bg-neutral-900/95 backdrop-blur-sm flex flex-col items-center justify-center p-4 min-h-[120px]">
                   <Sparkles className="w-6 h-6 text-blue-500 animate-pulse mb-3" />
-                  <span className="text-sm font-medium text-foreground text-center max-w-full truncate px-2">
+                  <span className="text-sm font-medium text-neutral-900 dark:text-neutral-50 text-center max-w-full truncate px-2">
                     {toolName ? `Running: ${normalizeToolName(toolName)}` : "Analyzing context..."}
                   </span>
                   {displayText && (
-                    <p className="text-xs text-muted-foreground leading-relaxed text-center mt-2 line-clamp-2 max-w-[280px]">
+                    <p className="text-xs text-neutral-500 dark:text-neutral-400 leading-relaxed text-center mt-2 line-clamp-2 max-w-[280px]">
                       {displayText}
                     </p>
                   )}
@@ -505,15 +558,15 @@ IMPORTANT: For this task, you MUST call the "context_selector" tool to return yo
               );
             })()}
           {error && (activeTab === "console" || activeTab === "network") && (
-            <div className="p-2 text-xs text-destructive">{error}</div>
+            <div className="p-2 text-xs text-red-600 dark:text-red-400">{error}</div>
           )}
 
           {/* Reasoning Display */}
           {selectedContext.reasoning && !isProcessing && (
-            <div className="bg-blue-50/50 p-2 border-b border-border">
+            <div className="bg-blue-50/50 p-2 border-b border-neutral-200 dark:border-neutral-700">
               <div className="flex items-start gap-2">
-                <Sparkles className="w-3.5 h-3.5 text-blue-500 mt-0.5 flex-shrink-0" />
-                <p className="text-xs text-muted-foreground leading-relaxed italic">
+                <Sparkles className="w-3.5 h-3.5 text-blue-500 mt-0.5 shrink-0" />
+                <p className="text-xs text-neutral-500 dark:text-neutral-400 leading-relaxed italic">
                   {selectedContext.reasoning}
                 </p>
               </div>
@@ -552,15 +605,15 @@ IMPORTANT: For this task, you MUST call the "context_selector" tool to return yo
                       <Code
                         className={
                           isRegionSelection
-                            ? "w-3.5 h-3.5 text-muted-foreground"
+                            ? "w-3.5 h-3.5 text-neutral-500 dark:text-neutral-400"
                             : "w-4 h-4 text-blue-500"
                         }
                       />
-                      <div className="text-xs font-medium text-muted-foreground">
+                      <div className="text-xs font-medium text-neutral-500 dark:text-neutral-400">
                         {isRegionSelection ? "Related Elements" : "Source Location"}
                       </div>
                       {isRegionSelection && (
-                        <span className="ml-auto px-1.5 py-0.5 text-[10px] bg-muted text-muted-foreground rounded-full">
+                        <span className="ml-auto px-1.5 py-0.5 text-[10px] bg-neutral-100 dark:bg-white/[0.06] border border-neutral-200 dark:border-white/10 text-neutral-500 dark:text-neutral-400 rounded-full">
                           {elements.length}
                         </span>
                       )}
@@ -569,13 +622,13 @@ IMPORTANT: For this task, you MUST call the "context_selector" tool to return yo
                       {Object.entries(grouped).map(([file, fileElements]) => (
                         <div key={file} className="space-y-0.5">
                           {/* File header - always show for consistency */}
-                          <div className="px-2 py-1 text-[11px] font-medium text-muted-foreground/70 bg-muted/30 rounded sticky top-0">
+                          <div className="px-2 py-1 text-[11px] font-medium text-neutral-500/70 dark:text-neutral-400/70 bg-neutral-100/60 dark:bg-neutral-800/60 rounded sticky top-0">
                             {file} ({fileElements.length})
                           </div>
                           {/* Elements */}
                           {fileElements.map(({ el, idx }) => (
                             <div key={idx} className="group relative">
-                              <label className="flex items-start gap-2 pl-4 pr-8 py-1.5 rounded hover:bg-accent/50 cursor-pointer transition-colors relative">
+                              <label className="flex items-start gap-2 pl-4 pr-8 py-1.5 rounded hover:bg-neutral-100/50 dark:hover:bg-neutral-700/50 cursor-pointer transition-colors relative">
                                 <input
                                   type="checkbox"
                                   checked={
@@ -586,22 +639,22 @@ IMPORTANT: For this task, you MUST call the "context_selector" tool to return yo
                                   onChange={() =>
                                     isRegionSelection ? toggleRelatedElement(idx) : toggleElement()
                                   }
-                                  className="mt-0.5 rounded border-border"
+                                  className="mt-0.5 rounded border-neutral-200 dark:border-neutral-700"
                                 />
                                 <div className="flex-1 min-w-0 text-xs font-mono">
                                   <div className="flex items-center gap-1.5">
-                                    <span className="text-foreground/80 font-medium">
+                                    <span className="text-neutral-800 dark:text-neutral-200 font-medium">
                                       {el.component}
                                     </span>
-                                    <span className="text-muted-foreground/50">•</span>
-                                    <span className="text-muted-foreground">
+                                    <span className="text-neutral-500/50 dark:text-neutral-400/50">•</span>
+                                    <span className="text-neutral-500 dark:text-neutral-400">
                                       {el.line}:{el.column}
                                     </span>
                                   </div>
 
                                   {/* Additional identifying info */}
                                   {el.elementInfo && (
-                                    <div className="text-[10px] text-muted-foreground/60 mt-0.5 space-x-2">
+                                    <div className="text-[10px] text-neutral-500/60 dark:text-neutral-400/60 mt-0.5 space-x-2">
                                       {typeof el.elementInfo.className === "string" &&
                                         el.elementInfo.className && (
                                           <span>.{el.elementInfo.className.split(" ")[0]}</span>
@@ -639,7 +692,7 @@ IMPORTANT: For this task, you MUST call the "context_selector" tool to return yo
                                   "absolute right-1 top-1.5 p-1 rounded transition-colors",
                                   selectedContext.elementNotes[idx]
                                     ? "text-yellow-600 hover:bg-yellow-100 opacity-100"
-                                    : "text-muted-foreground/40 hover:text-foreground hover:bg-accent opacity-0 group-hover:opacity-100",
+                                    : "text-neutral-500/40 dark:text-neutral-400/40 hover:text-neutral-900 dark:hover:text-neutral-50 hover:bg-neutral-100 dark:hover:bg-neutral-700 opacity-0 group-hover:opacity-100",
                                 )}
                                 title="Add note to element"
                               >
@@ -648,13 +701,13 @@ IMPORTANT: For this task, you MUST call the "context_selector" tool to return yo
 
                               {/* Inline Note Editor */}
                               {editingNoteId === idx && (
-                                <div className="px-4 py-2 bg-muted/30 border-t border-b border-border">
+                                <div className="px-4 py-2 bg-neutral-100/60 dark:bg-neutral-800/60 border-t border-b border-neutral-200 dark:border-neutral-700">
                                   <div className="flex gap-2">
                                     <input
                                       type="text"
                                       autoFocus
                                       placeholder="Describe issue with this element..."
-                                      className="flex-1 text-xs bg-background border border-input rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-primary"
+                                      className="flex-1 text-xs bg-white dark:bg-neutral-900 border border-input rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-primary"
                                       defaultValue={selectedContext.elementNotes[idx] || ""}
                                       onKeyDown={(e) => {
                                         if (e.key === "Enter") {
@@ -698,7 +751,7 @@ IMPORTANT: For this task, you MUST call the "context_selector" tool to return yo
                                     />
                                     <button
                                       onClick={() => setEditingNoteId(null)}
-                                      className="text-muted-foreground hover:text-foreground"
+                                      className="text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-50"
                                     >
                                       <X className="w-3.5 h-3.5" />
                                     </button>
@@ -719,46 +772,46 @@ IMPORTANT: For this task, you MUST call the "context_selector" tool to return yo
           {/* Styles Tab */}
           {activeTab === "styles" && (
             <div className="p-2 space-y-1">
-              <label className="flex items-start gap-2 p-2 rounded hover:bg-accent/50 cursor-pointer transition-colors">
+              <label className="flex items-start gap-2 p-2 rounded hover:bg-neutral-100/50 dark:hover:bg-neutral-700/50 cursor-pointer transition-colors">
                 <input
                   type="checkbox"
                   checked={selectedContext.includeStyles}
                   onChange={toggleStyles}
-                  className="mt-0.5 rounded border-border"
+                  className="mt-0.5 rounded border-neutral-200 dark:border-neutral-700"
                 />
                 <Type className="w-4 h-4 text-purple-500 flex-shrink-0" />
                 <div className="flex-1 min-w-0">
-                  <div className="text-xs font-medium text-foreground">Computed Styles</div>
+                  <div className="text-xs font-medium text-neutral-900 dark:text-neutral-50">Computed Styles</div>
                   {typographyStyles && (
-                    <div className="text-xs text-muted-foreground space-y-0.5 mt-1">
+                    <div className="text-xs text-neutral-500 dark:text-neutral-400 space-y-0.5 mt-1">
                       <div className="flex gap-2">
-                        <span className="text-muted-foreground/70">Font:</span>
+                        <span className="text-neutral-500/70 dark:text-neutral-400/70">Font:</span>
                         <span className="font-mono truncate">{typographyStyles.fontFamily}</span>
                       </div>
                       <div className="flex gap-2">
-                        <span className="text-muted-foreground/70">Size:</span>
+                        <span className="text-neutral-500/70 dark:text-neutral-400/70">Size:</span>
                         <span className="font-mono">{typographyStyles.fontSize}</span>
-                        <span className="text-muted-foreground/70 ml-2">Weight:</span>
+                        <span className="text-neutral-500/70 dark:text-neutral-400/70 ml-2">Weight:</span>
                         <span className="font-mono">{typographyStyles.fontWeight}</span>
                       </div>
                       <div className="flex gap-2">
-                        <span className="text-muted-foreground/70">Color:</span>
+                        <span className="text-neutral-500/70 dark:text-neutral-400/70">Color:</span>
                         <span className="font-mono flex items-center gap-1">
                           <span
-                            className="inline-block w-3 h-3 rounded border border-border"
+                            className="inline-block w-3 h-3 rounded border border-neutral-200 dark:border-neutral-700"
                             style={{ backgroundColor: typographyStyles.color }}
                           />
                           {typographyStyles.color}
                         </span>
                       </div>
                       <div className="flex gap-2">
-                        <span className="text-muted-foreground/70">Line Height:</span>
+                        <span className="text-neutral-500/70 dark:text-neutral-400/70">Line Height:</span>
                         <span className="font-mono">{typographyStyles.lineHeight}</span>
                       </div>
                     </div>
                   )}
                   {!typographyStyles && (
-                    <div className="text-xs text-muted-foreground/50 italic">
+                    <div className="text-xs text-neutral-500/50 dark:text-neutral-400/50 italic">
                       No style data available
                     </div>
                   )}
@@ -771,20 +824,20 @@ IMPORTANT: For this task, you MUST call the "context_selector" tool to return yo
           {activeTab === "screenshot" && (
             <div className="p-2 space-y-1">
               {screenshot ? (
-                <label className="flex items-start gap-2 p-2 rounded hover:bg-accent/50 cursor-pointer transition-colors">
+                <label className="flex items-start gap-2 p-2 rounded hover:bg-neutral-100/50 dark:hover:bg-neutral-700/50 cursor-pointer transition-colors">
                   <input
                     type="checkbox"
                     checked={selectedContext.includeScreenshot}
                     onChange={toggleScreenshot}
-                    className="mt-0.5 rounded border-border"
+                    className="mt-0.5 rounded border-neutral-200 dark:border-neutral-700"
                   />
                   <div className="flex-1 min-w-0">
-                    <div className="text-xs font-medium text-foreground mb-1">Element Visual</div>
-                    <div className="text-[10px] text-muted-foreground/70 mb-2">
+                    <div className="text-xs font-medium text-neutral-900 dark:text-neutral-50 mb-1">Element Visual</div>
+                    <div className="text-[10px] text-neutral-500/70 dark:text-neutral-400/70 mb-2">
                       Note: Copy & Go only copies text (IDEs don't support mixed text/image paste).
                       To include the image, please right-click and copy it manually.
                     </div>
-                    <div className="rounded border border-border overflow-hidden bg-muted/30">
+                    <div className="rounded border border-neutral-200 dark:border-neutral-700 overflow-hidden bg-neutral-100/60 dark:bg-neutral-800/60">
                       <img
                         src={screenshot}
                         alt="Element Visual"
@@ -794,7 +847,7 @@ IMPORTANT: For this task, you MUST call the "context_selector" tool to return yo
                   </div>
                 </label>
               ) : (
-                <p className="text-xs text-muted-foreground text-center py-4">
+                <p className="text-xs text-neutral-500 dark:text-neutral-400 text-center py-4">
                   No visual available
                 </p>
               )}
@@ -805,40 +858,40 @@ IMPORTANT: For this task, you MUST call the "context_selector" tool to return yo
           {activeTab === "page" && (
             <div className="p-2 space-y-1">
               {pageInfo ? (
-                <label className="flex items-start gap-2 p-2 rounded hover:bg-accent/50 cursor-pointer transition-colors">
+                <label className="flex items-start gap-2 p-2 rounded hover:bg-neutral-100/50 dark:hover:bg-neutral-700/50 cursor-pointer transition-colors">
                   <input
                     type="checkbox"
                     checked={selectedContext.includePageInfo}
                     onChange={togglePageInfo}
-                    className="mt-0.5 rounded border-border"
+                    className="mt-0.5 rounded border-neutral-200 dark:border-neutral-700"
                   />
                   <Globe className="w-4 h-4 text-green-500 flex-shrink-0" />
                   <div className="flex-1 min-w-0">
-                    <div className="text-xs font-medium text-foreground mb-1">Page Information</div>
-                    <div className="text-xs text-muted-foreground space-y-1">
+                    <div className="text-xs font-medium text-neutral-900 dark:text-neutral-50 mb-1">Page Information</div>
+                    <div className="text-xs text-neutral-500 dark:text-neutral-400 space-y-1">
                       <div className="flex gap-2">
-                        <span className="text-muted-foreground/70">URL:</span>
+                        <span className="text-neutral-500/70 dark:text-neutral-400/70">URL:</span>
                         <span className="font-mono truncate">{pageInfo.url}</span>
                       </div>
                       <div className="flex gap-2">
-                        <span className="text-muted-foreground/70">Title:</span>
+                        <span className="text-neutral-500/70 dark:text-neutral-400/70">Title:</span>
                         <span className="truncate">{pageInfo.title}</span>
                       </div>
                       <div className="flex gap-2">
-                        <span className="text-muted-foreground/70">Viewport:</span>
+                        <span className="text-neutral-500/70 dark:text-neutral-400/70">Viewport:</span>
                         <span className="font-mono">
                           {pageInfo.viewport.width} × {pageInfo.viewport.height}
                         </span>
                       </div>
                       <div className="flex gap-2">
-                        <span className="text-muted-foreground/70">Language:</span>
+                        <span className="text-neutral-500/70 dark:text-neutral-400/70">Language:</span>
                         <span className="font-mono">{pageInfo.language}</span>
                       </div>
                     </div>
                   </div>
                 </label>
               ) : (
-                <p className="text-xs text-muted-foreground text-center py-4">
+                <p className="text-xs text-neutral-500 dark:text-neutral-400 text-center py-4">
                   Loading page info...
                 </p>
               )}
@@ -851,7 +904,7 @@ IMPORTANT: For this task, you MUST call the "context_selector" tool to return yo
             activeTab !== "screenshot" &&
             activeTab !== "page" && (
               <div className="flex items-center justify-center py-6">
-                <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+                <Loader2 className="w-5 h-5 animate-spin text-neutral-500 dark:text-neutral-400" />
               </div>
             )}
 
@@ -859,39 +912,39 @@ IMPORTANT: For this task, you MUST call the "context_selector" tool to return yo
             <div className="p-2 space-y-1">
               {/* Search Input */}
               <div className="relative mb-2">
-                <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-neutral-500 dark:text-neutral-400" />
                 <input
                   type="text"
                   value={consoleSearch}
                   onChange={(e) => setConsoleSearch(e.target.value)}
                   placeholder="Filter logs..."
-                  className="w-full pl-7 pr-7 py-1.5 text-xs rounded border border-border bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+                  className="w-full pl-7 pr-7 py-1.5 text-xs rounded border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 focus:outline-none focus:ring-1 focus:ring-ring"
                 />
                 {consoleSearch && (
                   <button
                     type="button"
                     onClick={() => setConsoleSearch("")}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-50"
                   >
                     <X className="w-3.5 h-3.5" />
                   </button>
                 )}
               </div>
               {filteredConsole.length === 0 ? (
-                <p className="text-xs text-muted-foreground text-center py-4">
+                <p className="text-xs text-neutral-500 dark:text-neutral-400 text-center py-4">
                   {consoleSearch ? "No matching logs" : "No console logs"}
                 </p>
               ) : (
                 filteredConsole.map((msg) => (
                   <label
                     key={msg.msgid}
-                    className="flex items-start gap-2 p-2 rounded hover:bg-accent/50 cursor-pointer transition-colors"
+                    className="flex items-start gap-2 p-2 rounded hover:bg-neutral-100/50 dark:hover:bg-neutral-700/50 cursor-pointer transition-colors"
                   >
                     <input
                       type="checkbox"
                       checked={selectedContext.consoleIds.includes(msg.msgid)}
                       onChange={() => toggleConsole(msg.msgid)}
-                      className="mt-0.5 rounded border-border"
+                      className="mt-0.5 rounded border-neutral-200 dark:border-neutral-700"
                     />
                     <span
                       className={cn(
@@ -901,7 +954,7 @@ IMPORTANT: For this task, you MUST call the "context_selector" tool to return yo
                     >
                       {msg.level}
                     </span>
-                    <span className="text-xs text-foreground/90 flex-1 font-mono break-all line-clamp-2">
+                    <span className="text-xs text-neutral-900 dark:text-neutral-100 flex-1 font-mono break-all line-clamp-2">
                       {msg.text}
                     </span>
                   </label>
@@ -914,26 +967,26 @@ IMPORTANT: For this task, you MUST call the "context_selector" tool to return yo
             <div className="p-2 space-y-1">
               {/* Search Input */}
               <div className="relative mb-2">
-                <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-neutral-500 dark:text-neutral-400" />
                 <input
                   type="text"
                   value={networkSearch}
                   onChange={(e) => setNetworkSearch(e.target.value)}
                   placeholder="Filter requests..."
-                  className="w-full pl-7 pr-7 py-1.5 text-xs rounded border border-border bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+                  className="w-full pl-7 pr-7 py-1.5 text-xs rounded border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 focus:outline-none focus:ring-1 focus:ring-ring"
                 />
                 {networkSearch && (
                   <button
                     type="button"
                     onClick={() => setNetworkSearch("")}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-50"
                   >
                     <X className="w-3.5 h-3.5" />
                   </button>
                 )}
               </div>
               {filteredNetwork.length === 0 ? (
-                <p className="text-xs text-muted-foreground text-center py-4">
+                <p className="text-xs text-neutral-500 dark:text-neutral-400 text-center py-4">
                   {networkSearch ? "No matching requests" : "No network requests"}
                 </p>
               ) : (
@@ -957,18 +1010,18 @@ IMPORTANT: For this task, you MUST call the "context_selector" tool to return yo
           {!loading && activeTab === "stdio" && (
             <div className="p-2 space-y-1">
               {stdioMessages.length === 0 ? (
-                <p className="text-xs text-muted-foreground text-center py-4">No terminal logs</p>
+                <p className="text-xs text-neutral-500 dark:text-neutral-400 text-center py-4">No terminal logs</p>
               ) : (
                 stdioMessages.map((msg) => (
                   <label
                     key={msg.stdioid}
-                    className="flex items-start gap-2 p-2 rounded hover:bg-accent/50 cursor-pointer transition-colors"
+                    className="flex items-start gap-2 p-2 rounded hover:bg-neutral-100/50 dark:hover:bg-neutral-700/50 cursor-pointer transition-colors"
                   >
                     <input
                       type="checkbox"
                       checked={selectedContext.stdioIds.includes(msg.stdioid)}
                       onChange={() => toggleStdio(msg.stdioid)}
-                      className="mt-0.5 rounded border-border"
+                      className="mt-0.5 rounded border-neutral-200 dark:border-neutral-700"
                     />
                     <span
                       className={cn(
@@ -980,7 +1033,7 @@ IMPORTANT: For this task, you MUST call the "context_selector" tool to return yo
                     >
                       {msg.stream}
                     </span>
-                    <span className="text-xs text-foreground/90 flex-1 font-mono break-all whitespace-pre-wrap">
+                    <span className="text-xs text-neutral-900 dark:text-neutral-100 flex-1 font-mono break-all whitespace-pre-wrap">
                       {msg.data}
                     </span>
                   </label>

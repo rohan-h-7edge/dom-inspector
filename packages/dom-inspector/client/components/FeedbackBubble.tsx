@@ -10,7 +10,7 @@ import {
   DialogTitle,
 } from "./ui/dialog";
 import { Button } from "./ui/button";
-import { Loader2, CheckCircle2, XCircle, Copy } from "lucide-react";
+import { Loader2, CheckCircle2, XCircle, Copy, Sparkles } from "lucide-react";
 import { PlanProgress } from "./PlanProgress";
 import { usePlanProgress } from "../hooks/usePlanProgress";
 import { ContextPicker, type SelectedContext } from "./ContextPicker";
@@ -247,7 +247,11 @@ export const FeedbackBubble: React.FC<FeedbackBubbleProps> = ({
       <XCircle className="h-5 w-5 text-red-600 dark:text-red-500" />
     ) : mode === "loading" ? (
       <Loader2 className="h-5 w-5 animate-spin text-blue-600 dark:text-blue-500" />
-    ) : null;
+    ) : (
+      <span className="flex items-center justify-center h-6 w-6 rounded-full bg-linear-to-br from-violet-600 via-fuchsia-500 to-pink-500 shadow-sm shadow-fuchsia-500/40">
+        <Sparkles className="h-3 w-3 text-white" />
+      </span>
+    );
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -276,7 +280,7 @@ export const FeedbackBubble: React.FC<FeedbackBubbleProps> = ({
               onChange={(e) => setFeedback(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="What should the AI do with this?"
-              className="w-full min-h-[120px] px-4 py-3 rounded-lg border border-input bg-background text-sm resize-y focus:outline-none focus:ring-2 focus:ring-ring"
+              className="w-full min-h-[120px] px-4 py-3 rounded-lg border border-input bg-background text-sm resize-y transition-shadow focus:outline-none focus:ring-2 focus:ring-fuchsia-500/40 focus:border-fuchsia-500/60"
             />
 
             {/* Separator */}
@@ -314,19 +318,36 @@ export const FeedbackBubble: React.FC<FeedbackBubbleProps> = ({
         <DialogFooter className="flex items-center gap-3 pt-2">
           {mode === "input" ? (
             <>
-              <Button variant="ghost" size="sm" onClick={handleCopyAndGo} className="mr-auto">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleCopyAndGo}
+                className="mr-auto text-fuchsia-600 hover:text-fuchsia-700 hover:bg-fuchsia-500/10 dark:text-fuchsia-400 dark:hover:text-fuchsia-300"
+              >
                 <Copy className="w-4 h-4 mr-1.5" />
                 Copy & Go
               </Button>
               <div className="flex gap-2">
-                <Button variant="outline" onClick={() => handleSubmit(true)}>
+                <Button
+                  variant="outline"
+                  onClick={() => handleSubmit(true)}
+                  className="border-fuchsia-500/30 text-fuchsia-600 hover:bg-fuchsia-500/10 hover:text-fuchsia-700 dark:text-fuchsia-400"
+                >
                   Submit & Continue
                 </Button>
-                <Button onClick={() => handleSubmit(false)}>Submit</Button>
+                <Button
+                  onClick={() => handleSubmit(false)}
+                  className="bg-linear-to-r from-violet-600 via-fuchsia-500 to-pink-500 text-white shadow-sm shadow-fuchsia-500/30 hover:shadow-md hover:shadow-fuchsia-500/40 hover:scale-[1.02] transition-all"
+                >
+                  Submit
+                </Button>
               </div>
             </>
           ) : (
-            <Button onClick={() => setOpen(false)} className="w-full">
+            <Button
+              onClick={() => setOpen(false)}
+              className="w-full bg-linear-to-r from-violet-600 via-fuchsia-500 to-pink-500 text-white shadow-sm shadow-fuchsia-500/30"
+            >
               Close
             </Button>
           )}

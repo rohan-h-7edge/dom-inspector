@@ -66,7 +66,12 @@ function DialogContent({
       <div
         className={cn(
           "fixed top-1/2 left-1/2 z-[1000001] -translate-x-1/2 -translate-y-1/2",
-          "bg-background text-foreground border rounded-lg p-6 shadow-lg",
+          // Explicit solid colors, not the CSS-variable-driven `bg-background`
+          // utility: inside a shadow root, `hsl(var(--background))`-style
+          // utilities have been observed to fail to paint solid, letting
+          // page content behind the dialog bleed through.
+          "bg-white dark:bg-neutral-900 text-foreground",
+          "border border-border/80 rounded-xl p-6 shadow-2xl shadow-black/20 ring-1 ring-black/5",
           "animate-in fade-in-0 zoom-in-95 duration-200",
           "w-full max-w-lg", // Default width, can be overridden by className
           className,
@@ -79,7 +84,7 @@ function DialogContent({
           <button
             type="button"
             onClick={onClose}
-            className="absolute top-4 right-4 rounded-sm opacity-70 transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+            className="absolute top-4 right-4 flex items-center justify-center w-7 h-7 rounded-full text-neutral-500 dark:text-neutral-300 bg-neutral-100 dark:bg-white/10 hover:bg-neutral-200 dark:hover:bg-white/20 hover:text-neutral-900 dark:hover:text-white transition-colors focus:outline-none focus:ring-2 focus:ring-fuchsia-500/50"
           >
             <XIcon className="h-4 w-4" />
             <span className="sr-only">Close</span>

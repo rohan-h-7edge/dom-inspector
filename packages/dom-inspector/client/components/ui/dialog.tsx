@@ -111,11 +111,21 @@ function DialogFooter({ className, ...props }: React.ComponentProps<"div">) {
 }
 
 function DialogTitle({ className, ...props }: React.ComponentProps<"h2">) {
-  return <h2 className={cn("text-lg leading-none font-semibold", className)} {...props} />;
+  return (
+    <h2
+      className={cn(
+        "text-lg leading-none font-semibold text-neutral-900 dark:text-neutral-50",
+        className,
+      )}
+      {...props}
+    />
+  );
 }
 
 function DialogDescription({ className, ...props }: React.ComponentProps<"p">) {
-  return <p className={cn("text-muted-foreground text-sm", className)} {...props} />;
+  return (
+    <p className={cn("text-sm text-neutral-500 dark:text-neutral-400", className)} {...props} />
+  );
 }
 
 // Keep these exports for backwards compatibility but they're no longer needed

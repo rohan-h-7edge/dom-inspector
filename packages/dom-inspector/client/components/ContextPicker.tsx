@@ -510,7 +510,7 @@ IMPORTANT: For this task, you MUST call the "context_selector" tool to return yo
               refresh();
             }}
             disabled={loading}
-            className="p-1 hover:bg-neutral-100 dark:hover:bg-neutral-700 rounded transition-colors"
+            className="flex items-center justify-center w-6 h-6 rounded-full text-neutral-600 dark:text-neutral-300 bg-neutral-100 dark:bg-white/10 hover:bg-neutral-200 dark:hover:bg-white/20 hover:text-neutral-900 dark:hover:text-white transition-colors disabled:opacity-50"
             title="Refresh"
           >
             <RefreshCw className={cn("w-3.5 h-3.5", loading && "animate-spin")} />
@@ -689,10 +689,12 @@ IMPORTANT: For this task, you MUST call the "context_selector" tool to return yo
                                   setEditingNoteId(idx);
                                 }}
                                 className={cn(
-                                  "absolute right-1 top-1.5 p-1 rounded transition-colors",
+                                  "absolute right-1 top-1.5 p-1 rounded-full transition-all",
                                   selectedContext.elementNotes[idx]
-                                    ? "text-yellow-600 hover:bg-yellow-100 opacity-100"
-                                    : "text-neutral-500/40 dark:text-neutral-400/40 hover:text-neutral-900 dark:hover:text-neutral-50 hover:bg-neutral-100 dark:hover:bg-neutral-700 opacity-0 group-hover:opacity-100",
+                                    ? "text-yellow-600 bg-yellow-100 dark:bg-yellow-500/20"
+                                    // Always visible (not hover-only) with a solid, legible resting
+                                    // color; brightens further on hover.
+                                    : "text-neutral-500 dark:text-neutral-300 hover:text-neutral-900 dark:hover:text-white hover:bg-neutral-200 dark:hover:bg-white/15",
                                 )}
                                 title="Add note to element"
                               >
@@ -707,7 +709,7 @@ IMPORTANT: For this task, you MUST call the "context_selector" tool to return yo
                                       type="text"
                                       autoFocus
                                       placeholder="Describe issue with this element..."
-                                      className="flex-1 text-xs bg-white dark:bg-neutral-900 border border-input rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-primary"
+                                      className="flex-1 text-xs text-neutral-900 dark:text-neutral-100 placeholder:text-neutral-400 dark:placeholder:text-neutral-500 bg-white dark:bg-white/5 border border-neutral-300 dark:border-white/15 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-fuchsia-500/50"
                                       defaultValue={selectedContext.elementNotes[idx] || ""}
                                       onKeyDown={(e) => {
                                         if (e.key === "Enter") {
@@ -918,7 +920,7 @@ IMPORTANT: For this task, you MUST call the "context_selector" tool to return yo
                   value={consoleSearch}
                   onChange={(e) => setConsoleSearch(e.target.value)}
                   placeholder="Filter logs..."
-                  className="w-full pl-7 pr-7 py-1.5 text-xs rounded border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 focus:outline-none focus:ring-1 focus:ring-ring"
+                  className="w-full pl-7 pr-7 py-1.5 text-xs text-neutral-900 dark:text-neutral-100 placeholder:text-neutral-400 dark:placeholder:text-neutral-500 rounded border border-neutral-300 dark:border-white/15 bg-white dark:bg-white/5 focus:outline-none focus:ring-1 focus:ring-fuchsia-500/50"
                 />
                 {consoleSearch && (
                   <button
@@ -973,7 +975,7 @@ IMPORTANT: For this task, you MUST call the "context_selector" tool to return yo
                   value={networkSearch}
                   onChange={(e) => setNetworkSearch(e.target.value)}
                   placeholder="Filter requests..."
-                  className="w-full pl-7 pr-7 py-1.5 text-xs rounded border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 focus:outline-none focus:ring-1 focus:ring-ring"
+                  className="w-full pl-7 pr-7 py-1.5 text-xs text-neutral-900 dark:text-neutral-100 placeholder:text-neutral-400 dark:placeholder:text-neutral-500 rounded border border-neutral-300 dark:border-white/15 bg-white dark:bg-white/5 focus:outline-none focus:ring-1 focus:ring-fuchsia-500/50"
                 />
                 {networkSearch && (
                   <button

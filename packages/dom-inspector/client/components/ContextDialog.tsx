@@ -508,7 +508,7 @@ export const ContextDialog: React.FC<ContextDialogProps> = ({
                   value={consoleSearch}
                   onChange={(e) => setConsoleSearch(e.target.value)}
                   placeholder="Filter logs..."
-                  className="w-full pl-7 pr-7 py-1.5 text-xs rounded border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 focus:outline-none focus:ring-1 focus:ring-ring"
+                  className="w-full pl-7 pr-7 py-1.5 text-xs text-neutral-900 dark:text-neutral-100 placeholder:text-neutral-400 dark:placeholder:text-neutral-500 rounded border border-neutral-300 dark:border-white/15 bg-white dark:bg-white/5 focus:outline-none focus:ring-1 focus:ring-fuchsia-500/50"
                 />
                 {consoleSearch && (
                   <button
@@ -574,7 +574,7 @@ export const ContextDialog: React.FC<ContextDialogProps> = ({
                   value={networkSearch}
                   onChange={(e) => setNetworkSearch(e.target.value)}
                   placeholder="Filter requests..."
-                  className="w-full pl-7 pr-7 py-1.5 text-xs rounded border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 focus:outline-none focus:ring-1 focus:ring-ring"
+                  className="w-full pl-7 pr-7 py-1.5 text-xs text-neutral-900 dark:text-neutral-100 placeholder:text-neutral-400 dark:placeholder:text-neutral-500 rounded border border-neutral-300 dark:border-white/15 bg-white dark:bg-white/5 focus:outline-none focus:ring-1 focus:ring-fuchsia-500/50"
                 />
                 {networkSearch && (
                   <button
@@ -629,7 +629,7 @@ export const ContextDialog: React.FC<ContextDialogProps> = ({
                   value={stdioSearch}
                   onChange={(e) => setStdioSearch(e.target.value)}
                   placeholder="Filter terminal..."
-                  className="w-full pl-7 pr-7 py-1.5 text-xs rounded border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 focus:outline-none focus:ring-1 focus:ring-ring"
+                  className="w-full pl-7 pr-7 py-1.5 text-xs text-neutral-900 dark:text-neutral-100 placeholder:text-neutral-400 dark:placeholder:text-neutral-500 rounded border border-neutral-300 dark:border-white/15 bg-white dark:bg-white/5 focus:outline-none focus:ring-1 focus:ring-fuchsia-500/50"
                 />
                 {stdioSearch && (
                   <button

@@ -261,7 +261,7 @@ export const FeedbackBubble: React.FC<FeedbackBubbleProps> = ({
             {icon}
             {title}
           </DialogTitle>
-          <DialogDescription className="text-xs text-muted-foreground">
+          <DialogDescription className="text-xs text-neutral-500 dark:text-neutral-400">
             {mode === "input" ? (
               "Describe what you want to fix or improve, then add context below"
             ) : (
@@ -280,7 +280,7 @@ export const FeedbackBubble: React.FC<FeedbackBubbleProps> = ({
               onChange={(e) => setFeedback(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="What should the AI do with this?"
-              className="w-full min-h-[120px] px-4 py-3 rounded-lg border border-input bg-background text-sm resize-y transition-shadow focus:outline-none focus:ring-2 focus:ring-fuchsia-500/40 focus:border-fuchsia-500/60"
+              className="w-full min-h-[120px] px-4 py-3 rounded-lg border border-neutral-300 dark:border-white/15 bg-white dark:bg-white/5 text-neutral-900 dark:text-neutral-100 placeholder:text-neutral-400 dark:placeholder:text-neutral-500 text-sm resize-y transition-shadow focus:outline-none focus:ring-2 focus:ring-fuchsia-500/40 focus:border-fuchsia-500/60"
             />
 
             {/* Separator */}
@@ -310,7 +310,7 @@ export const FeedbackBubble: React.FC<FeedbackBubbleProps> = ({
 
         {(mode === "success" || mode === "error") && (
           <div className="space-y-4">
-            <p className="text-sm text-foreground">{resultMessage}</p>
+            <p className="text-sm text-neutral-900 dark:text-neutral-50">{resultMessage}</p>
             {plan && <PlanProgress plan={plan} />}
           </div>
         )}

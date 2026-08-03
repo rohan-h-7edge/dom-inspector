@@ -22,7 +22,3 @@ npm run dev
 
 Runs both packages' `dev` scripts (sequentially).
 
-## Notes
-
-This project focuses on the core `dom-inspector` and `dynamic-island-app` packages, without example apps, docs, or CI scaffolding.
-# dom-inspector

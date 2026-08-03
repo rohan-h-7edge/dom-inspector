@@ -24,5 +24,5 @@ Runs both packages' `dev` scripts (sequentially).
 
 ## Notes
 
-This project was ported from a prior "dev-inspector" monorepo, dropping examples, docs, and CI scaffolding, and rebranding all `dev-inspector`/`DevInspector` identifiers to `dom-inspector`/`DomInspector` (env vars, CLI bin names, virtual module names, etc.).
+This project focuses on the core `dom-inspector` and `dynamic-island-app` packages, without example apps, docs, or CI scaffolding.
 # dom-inspector

@@ -25,7 +25,7 @@ const MAX_BODY_SIZE = 10 * 1024 * 1024;
  * Get the inspector client script content
  * Tries multiple paths to locate the bundled inspector script
  */
-function getInspectorScript(): string | null {
+function getInspectorScriptPath(): string | null {
   const possiblePaths = [
     path.resolve(process.cwd(), "packages/unplugin-dom-inspector/client/dist/inspector.js"),
     path.resolve(__dirname, "../../client/dist/inspector.js"),
@@ -37,17 +37,33 @@ function getInspectorScript(): string | null {
   ];
 
   for (const scriptPath of possiblePaths) {
-    try {
-      if (fs.existsSync(scriptPath)) {
-        return fs.readFileSync(scriptPath, "utf-8");
-      }
-    } catch (error) {
-      continue;
-    }
+    if (fs.existsSync(scriptPath)) return scriptPath;
   }
-
-  console.warn("⚠️  Inspector script not found. Run `pnpm build:client` first.");
   return null;
+}
+
+function getInspectorScript(): string | null {
+  const scriptPath = getInspectorScriptPath();
+  if (!scriptPath) {
+    console.warn("⚠️  Inspector script not found. Run `pnpm build:client` first.");
+    return null;
+  }
+  try {
+    return fs.readFileSync(scriptPath, "utf-8");
+  } catch {
+    return null;
+  }
+}
+
+/** mtime (ms) of the built inspector.js, used by the client to detect a rebuild and reload. */
+function getInspectorBuildMtime(): number | null {
+  const scriptPath = getInspectorScriptPath();
+  if (!scriptPath) return null;
+  try {
+    return fs.statSync(scriptPath).mtimeMs;
+  } catch {
+    return null;
+  }
 }
 
 function getInspectorCSS(): string | null {
@@ -176,27 +192,20 @@ export interface InspectorConfig {
 }
 
 export function setupInspectorMiddleware(middlewares: Connect.Server, config?: InspectorConfig) {
-  let cachedScript: string | null = null;
-  let cachedCSS: string | null = null;
-  let cachedSidebarScript: string | null = null;
-  let cachedSidebarCSS: string | null = null;
-  let cachedSidebarHTML: string | null = null;
-  let filesChecked = false;
-
   middlewares.use((req: IncomingMessage, res: ServerResponse, next: () => void) => {
     // Handle CORS for inspector endpoints
     if (req.url?.startsWith("/__inspector__")) {
       if (handleCors(req, res)) return;
     }
 
-    if (!filesChecked) {
-      cachedScript = getInspectorScript();
-      cachedCSS = getInspectorCSS();
-      cachedSidebarScript = getSidebarScript();
-      cachedSidebarCSS = getSidebarCSS();
-      cachedSidebarHTML = getSidebarHTML();
-      filesChecked = true;
-    }
+    // Re-read from disk on every request (instead of caching once per
+    // process) so a `tsdown --watch` rebuild of client/dist is picked up
+    // immediately on browser refresh, without restarting the dev server.
+    const cachedScript = getInspectorScript();
+    const cachedCSS = getInspectorCSS();
+    const cachedSidebarScript = getSidebarScript();
+    const cachedSidebarCSS = getSidebarCSS();
+    const cachedSidebarHTML = getSidebarHTML();
 
     // Serve sidebar HTML page
     if (req.url === "/__inspector__/sidebar" || req.url === "/__inspector__/sidebar/") {
@@ -294,6 +303,14 @@ export function setupInspectorMiddleware(middlewares: Connect.Server, config?: I
       }
       res.statusCode = 404;
       res.end("Inspector CSS not found");
+      return;
+    }
+
+    if (req.url === "/__inspector__/build-info") {
+      res.statusCode = 200;
+      res.setHeader("Content-Type", "application/json");
+      res.setHeader("Cache-Control", "no-cache");
+      res.end(JSON.stringify({ mtime: getInspectorBuildMtime() }));
       return;
     }
 

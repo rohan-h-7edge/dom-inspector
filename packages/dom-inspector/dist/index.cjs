@@ -221,6 +221,23 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
     script.src = baseUrl + '/__inspector__/inspector.js';
     script.type = 'module';
     document.head.appendChild(script);
+
+    let lastMtime = null;
+    setInterval(() => {
+      fetch(baseUrl + '/__inspector__/build-info')
+        .then((r) => r.json())
+        .then((data) => {
+          if (data.mtime == null) return;
+          if (lastMtime === null) {
+            lastMtime = data.mtime;
+            return;
+          }
+          if (data.mtime !== lastMtime) {
+            location.reload();
+          }
+        })
+        .catch(() => {});
+    }, 1000);
   }
 }
 `;
@@ -266,6 +283,25 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
     script.src = baseUrl + '/__inspector__/inspector.js';
     script.type = 'module';
     document.head.appendChild(script);
+
+    // Dev-time auto-reload: poll the built inspector.js's mtime and
+    // reload the page once a rebuild lands (e.g. tsdown --watch output).
+    var lastMtime = null;
+    setInterval(function() {
+      fetch(baseUrl + '/__inspector__/build-info')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (data.mtime == null) return;
+          if (lastMtime === null) {
+            lastMtime = data.mtime;
+            return;
+          }
+          if (data.mtime !== lastMtime) {
+            location.reload();
+          }
+        })
+        .catch(function() {});
+    }, 1000);
   }
 })();
 <\/script></body>`);

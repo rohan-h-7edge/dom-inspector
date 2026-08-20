@@ -339,6 +339,7 @@ ${e.length>0?e.join(`
     --color-fuchsia-600: oklch(59.1% .293 322.896);
     --color-fuchsia-700: oklch(51.8% .253 323.949);
     --color-pink-500: oklch(65.6% .241 354.308);
+    --color-pink-600: oklch(59.2% .249 .584);
     --color-gray-400: oklch(70.7% .022 261.325);
     --color-gray-800: oklch(27.8% .033 256.848);
     --color-zinc-500: oklch(55.2% .016 285.938);
@@ -2431,6 +2432,10 @@ ${e.length>0?e.join(`
     }
   }
 
+  .bg-pink-500 {
+    background-color: var(--color-pink-500);
+  }
+
   .bg-popover {
     background-color: var(--color-popover);
   }
@@ -2503,6 +2508,10 @@ ${e.length>0?e.join(`
     }
   }
 
+  .bg-red-600 {
+    background-color: var(--color-red-600);
+  }
+
   .bg-secondary {
     background-color: var(--color-secondary);
   }
@@ -2555,6 +2564,10 @@ ${e.length>0?e.join(`
     .bg-yellow-500\\/20 {
       background-color: color-mix(in oklab, var(--color-yellow-500) 20%, transparent);
     }
+  }
+
+  .bg-yellow-600 {
+    background-color: var(--color-yellow-600);
   }
 
   .bg-zinc-500\\/10 {
@@ -3832,6 +3845,10 @@ ${e.length>0?e.join(`
 
     .hover\\:bg-neutral-200:hover {
       background-color: var(--color-neutral-200);
+    }
+
+    .hover\\:bg-pink-600:hover {
+      background-color: var(--color-pink-600);
     }
 
     .hover\\:bg-primary\\/90:hover {

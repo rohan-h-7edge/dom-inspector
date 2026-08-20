@@ -118333,20 +118333,37 @@ const MAX_BODY_SIZE = 10 * 1024 * 1024;
 * Get the inspector client script content
 * Tries multiple paths to locate the bundled inspector script
 */
-function getInspectorScript() {
+function getInspectorScriptPath() {
 	const possiblePaths = [
 		path.default.resolve(process.cwd(), "packages/unplugin-dom-inspector/client/dist/inspector.js"),
 		path.default.resolve(__dirname$1, "../../client/dist/inspector.js"),
 		path.default.resolve(__dirname$1, "../client/dist/inspector.js"),
 		path.default.resolve(process.cwd(), "node_modules/@mcpc-tech/unplugin-dom-inspector-mcp/client/dist/inspector.js")
 	];
-	for (const scriptPath of possiblePaths) try {
-		if (fs.default.existsSync(scriptPath)) return fs.default.readFileSync(scriptPath, "utf-8");
-	} catch (error$2) {
-		continue;
-	}
-	console.warn("⚠️  Inspector script not found. Run `pnpm build:client` first.");
+	for (const scriptPath of possiblePaths) if (fs.default.existsSync(scriptPath)) return scriptPath;
 	return null;
+}
+function getInspectorScript() {
+	const scriptPath = getInspectorScriptPath();
+	if (!scriptPath) {
+		console.warn("⚠️  Inspector script not found. Run `pnpm build:client` first.");
+		return null;
+	}
+	try {
+		return fs.default.readFileSync(scriptPath, "utf-8");
+	} catch {
+		return null;
+	}
+}
+/** mtime (ms) of the built inspector.js, used by the client to detect a rebuild and reload. */
+function getInspectorBuildMtime() {
+	const scriptPath = getInspectorScriptPath();
+	if (!scriptPath) return null;
+	try {
+		return fs.default.statSync(scriptPath).mtimeMs;
+	} catch {
+		return null;
+	}
 }
 function getInspectorCSS() {
 	const possiblePaths = [
@@ -118406,24 +118423,15 @@ function getSidebarHTML() {
 	return null;
 }
 function setupInspectorMiddleware(middlewares, config$1) {
-	let cachedScript = null;
-	let cachedCSS = null;
-	let cachedSidebarScript = null;
-	let cachedSidebarCSS = null;
-	let cachedSidebarHTML = null;
-	let filesChecked = false;
 	middlewares.use((req, res, next$1) => {
 		if (req.url?.startsWith("/__inspector__")) {
 			if (handleCors(req, res)) return;
 		}
-		if (!filesChecked) {
-			cachedScript = getInspectorScript();
-			cachedCSS = getInspectorCSS();
-			cachedSidebarScript = getSidebarScript();
-			cachedSidebarCSS = getSidebarCSS();
-			cachedSidebarHTML = getSidebarHTML();
-			filesChecked = true;
-		}
+		const cachedScript = getInspectorScript();
+		const cachedCSS = getInspectorCSS();
+		const cachedSidebarScript = getSidebarScript();
+		const cachedSidebarCSS = getSidebarCSS();
+		const cachedSidebarHTML = getSidebarHTML();
 		if (req.url === "/__inspector__/sidebar" || req.url === "/__inspector__/sidebar/") {
 			if (cachedSidebarHTML) {
 				res.statusCode = 200;
@@ -118503,6 +118511,13 @@ function setupInspectorMiddleware(middlewares, config$1) {
 			}
 			res.statusCode = 404;
 			res.end("Inspector CSS not found");
+			return;
+		}
+		if (req.url === "/__inspector__/build-info") {
+			res.statusCode = 200;
+			res.setHeader("Content-Type", "application/json");
+			res.setHeader("Cache-Control", "no-cache");
+			res.end(JSON.stringify({ mtime: getInspectorBuildMtime() }));
 			return;
 		}
 		if (req.url === "/__inspector__/config.json") {

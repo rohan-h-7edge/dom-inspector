@@ -34,6 +34,35 @@ export const describeElement = (el) => {
   return `<${el.nodeName.toLowerCase()}${id}${classes}>`
 }
 
+// Builds a CSS selector that still resolves to `el` after a page reload
+// (post source-edit), so the AI can pass it to the verify_dom_position tool.
+// Prefers an id/data-testid; otherwise walks up building an nth-of-type path.
+export const buildStableSelector = el => {
+  if (!el || el.nodeType !== 1) return null
+  if (el.id) return `#${CSS.escape(el.id)}`
+  const testId = el.getAttribute('data-testid')
+  if (testId) return `[data-testid="${CSS.escape(testId)}"]`
+
+  const segments = []
+  let node = el
+  while (node && node.nodeType === 1 && node !== document.documentElement) {
+    if (node.id) {
+      segments.unshift(`#${CSS.escape(node.id)}`)
+      break
+    }
+    const parent = node.parentElement
+    if (!parent) {
+      segments.unshift(node.nodeName.toLowerCase())
+      break
+    }
+    const sameTagSiblings = Array.from(parent.children).filter(c => c.nodeName === node.nodeName)
+    const nthOfType = sameTagSiblings.indexOf(node) + 1
+    segments.unshift(`${node.nodeName.toLowerCase()}:nth-of-type(${nthOfType})`)
+    node = parent
+  }
+  return segments.join(' > ')
+}
+
 export const removeApplyViaAiButton = () => {
   if (activeButton) {
     activeButton.remove()

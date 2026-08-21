@@ -149,6 +149,7 @@ export async function createInspectorMcpServer(serverContext?: ServerContext): P
     TOOL_SCHEMAS.update_inspection_status,
     TOOL_SCHEMAS.execute_page_script,
     TOOL_SCHEMAS.get_page_info,
+    TOOL_SCHEMAS.verify_dom_position,
   ]);
 
   // ── Prompt helpers ────────────────────────────────────────────────────────

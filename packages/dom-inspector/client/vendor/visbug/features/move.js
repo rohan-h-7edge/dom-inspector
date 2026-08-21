@@ -1,6 +1,6 @@
 import $ from 'blingblingjs'
 import hotkeys from 'hotkeys-js'
-import { getNodeIndex, showEdge, swapElements, notList, describeElement, showApplyViaAiButton } from '../utilities/'
+import { getNodeIndex, showEdge, swapElements, notList, describeElement, showApplyViaAiButton, buildStableSelector } from '../utilities/'
 import { toggleWatching } from './imageswap'
 
 const roundRect = r => `x:${Math.round(r.x)} y:${Math.round(r.y)} width:${Math.round(r.width)} height:${Math.round(r.height)}`
@@ -15,12 +15,15 @@ const describePosition = el => {
   const siblings = Array.from(el.parentNode.children)
   const index = siblings.indexOf(el)
   const parentStyle = getComputedStyle(el.parentNode)
+  const elStyle = getComputedStyle(el)
   return {
     parent: el.parentNode,
     index,
     prevSibling: siblings[index - 1] || null,
     nextSibling: siblings[index + 1] || null,
     rect: el.getBoundingClientRect(),
+    margin: `${elStyle.marginTop} ${elStyle.marginRight} ${elStyle.marginBottom} ${elStyle.marginLeft}`,
+    parentRect: el.parentNode.getBoundingClientRect(),
     parentLayout: {
       display: parentStyle.display,
       flexDirection: parentStyle.flexDirection,
@@ -41,15 +44,34 @@ const announceMove = (el, before) => {
     const layout = pos.parentLayout.display.includes('flex') || pos.parentLayout.display.includes('grid')
       ? `, parent layout: display:${pos.parentLayout.display} flex-direction:${pos.parentLayout.flexDirection} gap:${pos.parentLayout.gap}`
       : `, parent layout: display:${pos.parentLayout.display}`
-    return `child #${pos.index} of ${describeElement(pos.parent)}, ${between}${layout}\n  bounding box: ${roundRect(pos.rect)}`
+    return `child #${pos.index} of ${describeElement(pos.parent)}, ${between}${layout}\n  bounding box: ${roundRect(pos.rect)}\n  element margin: ${pos.margin}\n  parent bounding box: ${roundRect(pos.parentRect)}`
+  }
+
+  const parentSizeChanged = before.parent === after.parent
+    && (Math.round(before.parentRect.width) !== Math.round(after.parentRect.width)
+      || Math.round(before.parentRect.height) !== Math.round(after.parentRect.height))
+
+  const selector = buildStableSelector(el)
+  const expected = {
+    index: after.index,
+    siblingCount: after.parent.children.length,
+    parentRect: { width: Math.round(after.parentRect.width), height: Math.round(after.parentRect.height) },
+    margin: after.margin,
+    rectTolerancePx: 2,
   }
 
   const text = `Move this element in the source: ${describeElement(el)}\n\n`
     + `It was: ${describeSlot(before)}\n\n`
     + `It is now: ${describeSlot(after)}\n\n`
     + `Find this element's source in the codebase (use the available inspection/context tools if needed) and reorder/reparent it there to match the new position — `
+    + `ONLY change the ordering/parenting. Do not add, remove, or edit any CSS, className, inline style, or wrapper markup on this element, its siblings, or its parent as part of this change — `
     + `use the bounding boxes and parent layout above to disambiguate if multiple similar elements exist (e.g. items rendered from a list/array; if so, reorder the underlying data, not just JSX). `
-    + `After editing, re-inspect the element and compare its new bounding box to "It is now" above — adjust again if it doesn't match.`
+    + `After editing, reload the page and call the verify_dom_position tool with the selector and expected spec below — do not consider this move done until it reports pass:true. `
+    + `If it reports mismatches, that's a real side effect (e.g. a different wrapper, missing/extra margin, a last-child CSS rule, or a flex-wrap causing an extra row) — find and fix the actual cause, don't add compensating spacing to force a pass.\n\n`
+    + `verify_dom_position({ selector: ${JSON.stringify(selector)}, expected: ${JSON.stringify(expected)} })`
+    + (parentSizeChanged
+      ? `\n\nNote: the parent's own bounding box changed from ${roundRect(before.parentRect)} to ${roundRect(after.parentRect)} as a result of this move in the live DOM — that change is expected and is already baked into the spec above.`
+      : '')
 
   showApplyViaAiButton(el, text)
 }

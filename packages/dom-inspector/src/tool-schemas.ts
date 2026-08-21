@@ -148,6 +148,53 @@ Returns: array of element contexts (max 50).`,
     },
   },
 
+  verify_dom_position: {
+    name: "verify_dom_position",
+    description: `Verify an element's live DOM position/box after a source-code edit exactly matches an expected structural spec (produced by the DOM inspector's move feature).
+
+Deterministically re-measures the element identified by \`selector\` (index among siblings, sibling count, parent box, own margin) and diffs it against \`expected\` with a small pixel tolerance.
+
+Returns \`{ pass, mismatches, actual }\`. Use this instead of eyeballing bounding boxes — it is the authoritative check for "did my edit reproduce the requested DOM change with no side effects".`,
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        selector: {
+          type: "string",
+          description: "CSS selector locating the moved element in the current (post-edit) page.",
+        },
+        expected: {
+          type: "object",
+          description: "Expected structural spec, as emitted by the move feature's 'Apply via AI' prompt.",
+          properties: {
+            index: { type: "number", description: "Expected index among parent's children." },
+            siblingCount: { type: "number", description: "Expected number of siblings (incl. this element)." },
+            elementRect: {
+              type: "object",
+              properties: {
+                x: { type: "number" },
+                y: { type: "number" },
+                width: { type: "number" },
+                height: { type: "number" },
+              },
+              description: "Expected bounding box (viewport coords) of the element itself — use for pixel-repositioning checks (e.g. after a free-drag nudge).",
+            },
+            parentRect: {
+              type: "object",
+              properties: {
+                width: { type: "number" },
+                height: { type: "number" },
+              },
+              description: "Expected parent bounding box width/height in px.",
+            },
+            margin: { type: "string", description: "Expected computed margin (top right bottom left)." },
+            rectTolerancePx: { type: "number", description: "Pixel tolerance for numeric comparisons. Default 2." },
+          },
+        },
+      },
+      required: ["selector", "expected"] as string[],
+    },
+  },
+
   get_page_info: {
     name: "get_page_info",
     description:

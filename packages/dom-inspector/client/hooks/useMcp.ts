@@ -637,6 +637,81 @@ ${a11yTree.length > 0 ? a11yTree.join("\n") : "(empty or no semantic structure)"
       return createTextContent(output);
     }
 
+    // Deterministically re-measure an element and diff it against an expected
+    // structural spec (index, sibling count, parent box, margin) — the
+    // authoritative check for "did the source edit reproduce the requested
+    // DOM change with no side effects", instead of the AI eyeballing rects.
+    function verifyDomPosition(args: { selector?: string; expected?: Record<string, any> } = {}) {
+      const { selector, expected = {} } = args;
+
+      if (!selector) return { pass: false, mismatches: ["No selector provided"], actual: null };
+
+      const el = document.querySelector(selector);
+      if (!el) return { pass: false, mismatches: [`No element found for selector: ${selector}`], actual: null };
+      if (!el.parentElement)
+        return { pass: false, mismatches: ["Element has no parent"], actual: null };
+
+      const parent = el.parentElement;
+      const siblings = Array.from(parent.children);
+      const index = siblings.indexOf(el);
+      const rect = el.getBoundingClientRect();
+      const parentRect = parent.getBoundingClientRect();
+      const style = getComputedStyle(el);
+      const margin = `${style.marginTop} ${style.marginRight} ${style.marginBottom} ${style.marginLeft}`;
+      const round = (r: DOMRect) => ({
+        x: Math.round(r.x),
+        y: Math.round(r.y),
+        width: Math.round(r.width),
+        height: Math.round(r.height),
+      });
+
+      const tolerance = expected.rectTolerancePx ?? 2;
+      const mismatches: string[] = [];
+
+      if (expected.index !== undefined && index !== expected.index)
+        mismatches.push(`index: expected ${expected.index}, got ${index}`);
+
+      if (expected.siblingCount !== undefined && siblings.length !== expected.siblingCount)
+        mismatches.push(`sibling count: expected ${expected.siblingCount}, got ${siblings.length}`);
+
+      if (expected.elementRect) {
+        for (const key of ["x", "y", "width", "height"] as const) {
+          if (expected.elementRect[key] === undefined) continue;
+          const diff = Math.abs(rect[key] - expected.elementRect[key]);
+          if (diff > tolerance)
+            mismatches.push(
+              `element ${key}: expected ${Math.round(expected.elementRect[key])}px, got ${Math.round(rect[key])}px (diff ${Math.round(diff)}px)`,
+            );
+        }
+      }
+
+      if (expected.parentRect) {
+        for (const key of ["width", "height"] as const) {
+          if (expected.parentRect[key] === undefined) continue;
+          const diff = Math.abs(parentRect[key] - expected.parentRect[key]);
+          if (diff > tolerance)
+            mismatches.push(
+              `parent ${key}: expected ${Math.round(expected.parentRect[key])}px, got ${Math.round(parentRect[key])}px (diff ${Math.round(diff)}px)`,
+            );
+        }
+      }
+
+      if (expected.margin !== undefined && expected.margin !== margin)
+        mismatches.push(`margin: expected "${expected.margin}", got "${margin}"`);
+
+      return {
+        pass: mismatches.length === 0,
+        mismatches,
+        actual: {
+          index,
+          siblingCount: siblings.length,
+          rect: round(rect),
+          parentRect: round(parentRect),
+          margin,
+        },
+      };
+    }
+
     eventHandlers.forEach(({ event, handler }) => {
       window.addEventListener(event, handler as EventListener);
     });
@@ -687,6 +762,13 @@ ${a11yTree.length > 0 ? a11yTree.join("\n") : "(empty or no semantic structure)"
         implementation: wrapToolImplementation(
           TOOL_SCHEMAS.get_page_info.name,
           getPageInfo as unknown as (args: Record<string, unknown> | undefined) => unknown,
+        ),
+      },
+      {
+        ...TOOL_SCHEMAS.verify_dom_position,
+        implementation: wrapToolImplementation(
+          TOOL_SCHEMAS.verify_dom_position.name,
+          verifyDomPosition as unknown as (args: Record<string, unknown> | undefined) => unknown,
         ),
       },
     ];

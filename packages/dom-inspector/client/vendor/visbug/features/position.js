@@ -1,6 +1,6 @@
 import $ from 'blingblingjs'
 import hotkeys from 'hotkeys-js'
-import { metaKey, getStyle, getSide, showHideSelected, describeElement, showApplyViaAiButton } from '../utilities/'
+import { metaKey, getStyle, getSide, showHideSelected, describeElement, showApplyViaAiButton, buildStableSelector } from '../utilities/'
 
 const key_events = 'up,down,left,right'
   .split(',')
@@ -33,6 +33,11 @@ const announcePositionMove = (el, before, after) => {
 
   const parent = el.parentElement
   const parentStyle = parent ? getComputedStyle(parent) : null
+  const selector = buildStableSelector(el)
+  const expected = {
+    elementRect: after.rect,
+    rectTolerancePx: 2,
+  }
 
   const text = `Reposition this element in the source: ${describeElement(el)}\n\n`
     + `It was dragged by mouse (a live visual nudge, done via a temporary \`${el instanceof SVGElement ? 'transform: translate(...)' : 'position: relative; left/top'}\` `
@@ -49,8 +54,13 @@ const announcePositionMove = (el, before, after) => {
         : '\n')
     + `Find this element's source in the codebase (use the available inspection/context tools if needed). Using the computed style and parent layout above, `
     + `apply an equivalent shift through the layout's existing mechanism (adjust an existing margin/gap/flex value to a specific new value — don't just add an arbitrary offset) `
-    + `so the bounding box matches "Bounding box after" above, then remove the temporary inline override. `
-    + `After editing, re-inspect the element and compare its new bounding box to the target above — adjust again if it doesn't match.`
+    + `so the bounding box matches "Bounding box after" above, then remove the temporary inline override.\n\n`
+    + `IMPORTANT: match the exact "Bounding box after" numbers above — including any overlap with neighboring elements this shift introduces. `
+    + `Do not substitute a conventional/common layout pattern for this element (e.g. a centered logo above a heading, restoring default spacing, or otherwise "cleaning up" the placement) even if the requested position looks unusual — the drag is the actual spec, reproduce it as-is, overlap and all.\n\n`
+    + `A mismatch means your change didn't reproduce the requested position. Don't just keep nudging the same margin/gap/offset value in a loop — if that mechanism can't reach the exact target `
+    + `(e.g. the target requires overlapping a neighbor, which plain margin/gap can't express), switch approach (negative margin, absolute/relative positioning, grid placement, z-index, etc.) `
+    + `and use whichever layout technique actually reproduces "Bounding box after" above, then verify again.\n\n`
+    + `verify_dom_position({ selector: ${JSON.stringify(selector)}, expected: ${JSON.stringify(expected)} })`
 
   showApplyViaAiButton(el, text)
 }

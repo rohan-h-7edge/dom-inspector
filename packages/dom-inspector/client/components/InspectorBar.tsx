@@ -368,18 +368,39 @@ export const InspectorBar = ({
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!input.trim()) return;
+  const submitToAgent = (text: string) => {
+    if (!text.trim()) return;
 
-    // Clear inspection status for new query
     setInspectionStatus(null);
 
     const agentToSubmit =
       availableAgents.find((a) => a.name === selectedAgent) ||
       availableAgents[0] ||
       AVAILABLE_AGENTS[0];
-    onSubmitAgent(input, agentToSubmit, sessionId || undefined);
+    onSubmitAgent(text, agentToSubmit, sessionId || undefined);
+  };
+
+  // Listen for style edits made from the metatip's inline editor + play
+  // button (packages/dom-inspector/client/vendor/visbug/components/metatip)
+  // and forward them straight to the agent.
+  useEffect(() => {
+    const onMetatipStyleEdit = (e: Event) => {
+      const detail = (e as CustomEvent<{ text?: string }>).detail;
+      if (!detail?.text) return;
+      submitToAgent(detail.text);
+      setIsExpanded(true);
+      setActivePanel("chat");
+    };
+
+    window.addEventListener("metatip-style-edit", onMetatipStyleEdit);
+    return () => window.removeEventListener("metatip-style-edit", onMetatipStyleEdit);
+  }, [availableAgents, selectedAgent, sessionId]);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!input.trim()) return;
+
+    submitToAgent(input);
     setInput("");
 
     // Auto-expand chat panel to show message detail

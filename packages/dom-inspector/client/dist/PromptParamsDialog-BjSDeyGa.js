@@ -117,19 +117,27 @@ ${t}
 - **Title**: ${e.title}
 - **Viewport**: ${e.viewport.width} × ${e.viewport.height}
 - **Language**: ${e.language}
-`}function KD(e){let{primaryNote:t,primaryTag:n,relatedElements:r,elementNotes:i}=e,a=[];if(t){let e=n||`element`;a.push(`- **Primary element** (${e}): ${t}`)}return r&&r.length>0&&r.forEach((e,t)=>{let n=e.note||i?.[t];if(n){let r=e.elementInfo?.tagName?.toLowerCase()||e.component,i=e.file&&e.line?` at ${e.file}:${e.line}`:``;a.push(`- **Related element #${t+1}** (${r}${i}): ${n}`)}}),a.length>0?`\n**Element Annotations**:\n${a.join(`
+`}function KD(e){let{primaryNote:t,primaryTag:n,relatedElements:r,elementNotes:i}=e,a=[],o=!!r&&r.length>0;if(t){let e=n||`element`,r=o?`Selected element 1`:`Primary element`;a.push(`- **${r}** (${e}): ${t}`)}return r&&r.length>0&&r.forEach((e,t)=>{let n=e.note||i?.[t];if(n){let r=e.elementInfo?.tagName?.toLowerCase()||e.component,i=e.file&&e.line?` at ${e.file}:${e.line}`:``;a.push(`- **Selected element ${t+2}** (${r}${i}): ${n}`)}}),a.length>0?`\n**Element Annotations**:\n${a.join(`
 `)}\n`:``}function qD(e){let{sourceInfo:t,includeElement:n,includeStyles:r,includePageInfo:i,pageInfo:a,feedback:o,consoleMessages:s,networkRequests:c,stdioMessages:l,relatedElements:u,relatedElementIds:d,elementNotes:f}=e,p=`# Element Context
 
-`,m=u&&u.length>0&&d&&d.length>0;if(t&&n&&(p+=`## Code
+`,m=u&&u.length>0&&d&&d.length>0;if(m){let e=(d?.length??0)+(n?1:0);p+=`## Multi-Element Selection
 
-`,m&&(p+=`### Primary Element (Best Match)
+`,p+=`**The user manually selected ${e} elements together** — treat them as one linked group, not independent/alternative matches. Any request below applies to all of them jointly unless a note says otherwise.\n\n`,p+=`If the request mentions spacing/gap without specifying which elements, assume it means the gap *between* these ${e} selected elements (their shared container's \`gap\`/margin-between-siblings) — NOT the internal padding/margin inside any one of the individual selected elements.\n\n`,p+=`To make that change: open the source file(s) shown below for these elements, find the parent/container that renders them together (search other files for where that component is used/rendered if the container isn't in the same file), and adjust the gap/margin on that shared container rather than on the individual element(s).
+
+`}if(t&&n&&(p+=`## Code
+
+`,m&&(p+=`### Selected Element 1 (of the group above)
 `),p+=VD(t),p+=`
 `,p+=zD(t.elementInfo),p+=`
-`),u&&u.length>0&&d&&d.length>0){let e=u.filter((e,t)=>d.includes(t));if(e.length>0){p+=`## Related Elements
+`),u&&u.length>0&&d&&d.length>0){let e=u.filter((e,t)=>d.includes(t));if(e.length>0){p+=n?`## Remaining Selected Elements (same group)
 
-`;let t=e.reduce((e,t)=>{let n=t.file||`unknown`;return e[n]||(e[n]=[]),e[n].push(t),e},{});Object.entries(t).forEach(([e,t])=>{p+=`### ${e}\n`,t.forEach(e=>{let t=u.indexOf(e),n=f?f[t]:null;if(p+=`- **${e.component}** (${e.line}:${e.column})`,e.elementInfo?.tagName){if(p+=` - \`<${e.elementInfo.tagName}`,e.elementInfo.className&&(p+=` class="${e.elementInfo.className}"`),e.elementInfo.id&&(p+=` id="${e.elementInfo.id}"`),p+=`>`,e.elementInfo.textContent){let t=e.elementInfo.textContent.trim().slice(0,30);t&&(p+=` "${t}${e.elementInfo.textContent.length>30?`...`:``}"`)}p+="`"}n&&(p+=`\n  - **USER NOTE**: "${n}"`),p+=`
-`}),p+=`
-`})}}return t?.elementInfo&&r&&(p+=`## Styles
+`:`## Selected Elements (multi-selection group)
+
+`;let t=e.reduce((e,t)=>{let n=t.file||`unknown`;return e[n]||(e[n]=[]),e[n].push(t),e},{});Object.entries(t).forEach(([e,t])=>{p+=`### ${e}\n`,t.forEach(e=>{let t=u.indexOf(e),n=f?f[t]:null;if(p+=`- **${e.component}** (${e.line}:${e.column})`,e.elementInfo?.tagName){if(p+=` - \`<${e.elementInfo.tagName}`,e.elementInfo.className&&(p+=` class="${e.elementInfo.className}"`),e.elementInfo.id&&(p+=` id="${e.elementInfo.id}"`),p+=`>`,e.elementInfo.textContent){let t=e.elementInfo.textContent.trim().slice(0,30);t&&(p+=` "${t}${e.elementInfo.textContent.length>30?`...`:``}"`)}p+="`"}if(n&&(p+=`\n  - **USER NOTE**: "${n}"`),p+=`
+`,r&&e.elementInfo){let t=BD(e.elementInfo);t&&(p+=`\n${t}\n`)}}),p+=`
+`})}}return t?.elementInfo&&r&&(p+=m?`## Styles (Primary Element)
+
+`:`## Styles
 
 `,p+=BD(t.elementInfo),p+=`
 `),a&&i&&(p+=GD(a),p+=`
@@ -184,7 +192,7 @@ update_inspection_status({
 })
 \`\`\``}];return t.forEach(e=>{e.selectedContext?.screenshot&&r.push(OP(e.selectedContext.screenshot))}),{content:r}}catch{return EP(`# Error
 
-Failed to load inspection items.`)}}function jP(e,t,n){let r=qD({sourceInfo:e,includeElement:n?.includeElement!==!1,includeStyles:n?.includeStyles!==!1,includePageInfo:!1,feedback:t,consoleMessages:n?.consoleMessages,networkRequests:n?.networkRequests,stdioMessages:n?.stdioMessages,relatedElements:e.relatedElements,relatedElementIds:e.relatedElements?.map((e,t)=>t),elementNotes:n?.elementNotes});r+=`
+Failed to load inspection items.`)}}function jP(e,t,n){let r=qD({sourceInfo:e,includeElement:n?.includeElement!==!1,includeStyles:n?.includeStyles!==!1,includePageInfo:!1,feedback:t,consoleMessages:n?.consoleMessages,networkRequests:n?.networkRequests,stdioMessages:n?.stdioMessages,relatedElements:e.relatedElements,relatedElementIds:n?.relatedElementIds??e.relatedElements?.map((e,t)=>t),elementNotes:n?.elementNotes});r+=`
 
 ## Your Task
 1. Investigate the issue using browser diagnostics tools: prefer 'chrome_devtools' when available; otherwise use 'get_console_messages' / 'get_network_requests' (and 'get_stdio_messages' if relevant)
@@ -339,7 +347,6 @@ ${e.length>0?e.join(`
     --color-fuchsia-600: oklch(59.1% .293 322.896);
     --color-fuchsia-700: oklch(51.8% .253 323.949);
     --color-pink-500: oklch(65.6% .241 354.308);
-    --color-pink-600: oklch(59.2% .249 .584);
     --color-gray-400: oklch(70.7% .022 261.325);
     --color-gray-800: oklch(27.8% .033 256.848);
     --color-zinc-500: oklch(55.2% .016 285.938);
@@ -1117,6 +1124,10 @@ ${e.length>0?e.join(`
     margin-left: calc(var(--spacing) * 4);
   }
 
+  .ml-6 {
+    margin-left: calc(var(--spacing) * 6);
+  }
+
   .ml-auto {
     margin-left: auto;
   }
@@ -1145,6 +1156,10 @@ ${e.length>0?e.join(`
 
   .grid {
     display: grid;
+  }
+
+  .inline {
+    display: inline;
   }
 
   .inline-block {
@@ -2432,10 +2447,6 @@ ${e.length>0?e.join(`
     }
   }
 
-  .bg-pink-500 {
-    background-color: var(--color-pink-500);
-  }
-
   .bg-popover {
     background-color: var(--color-popover);
   }
@@ -2508,10 +2519,6 @@ ${e.length>0?e.join(`
     }
   }
 
-  .bg-red-600 {
-    background-color: var(--color-red-600);
-  }
-
   .bg-secondary {
     background-color: var(--color-secondary);
   }
@@ -2564,10 +2571,6 @@ ${e.length>0?e.join(`
     .bg-yellow-500\\/20 {
       background-color: color-mix(in oklab, var(--color-yellow-500) 20%, transparent);
     }
-  }
-
-  .bg-yellow-600 {
-    background-color: var(--color-yellow-600);
   }
 
   .bg-zinc-500\\/10 {
@@ -3845,10 +3848,6 @@ ${e.length>0?e.join(`
 
     .hover\\:bg-neutral-200:hover {
       background-color: var(--color-neutral-200);
-    }
-
-    .hover\\:bg-pink-600:hover {
-      background-color: var(--color-pink-600);
     }
 
     .hover\\:bg-primary\\/90:hover {

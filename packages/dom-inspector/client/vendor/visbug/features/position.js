@@ -1,6 +1,6 @@
 import $ from 'blingblingjs'
 import hotkeys from 'hotkeys-js'
-import { metaKey, getStyle, getSide, showHideSelected } from '../utilities/'
+import { metaKey, getStyle, getSide, showHideSelected, describeElement, showApplyViaAiButton } from '../utilities/'
 
 const key_events = 'up,down,left,right'
   .split(',')
@@ -10,6 +10,50 @@ const key_events = 'up,down,left,right'
   .substring(1)
 
 const command_events = `${metaKey}+up,${metaKey}+shift+up,${metaKey}+down,${metaKey}+shift+down`
+
+const roundRect = r => ({
+  x: Math.round(r.x),
+  y: Math.round(r.y),
+  width: Math.round(r.width),
+  height: Math.round(r.height),
+})
+
+const fmtRect = r => `x:${r.x} y:${r.y} width:${r.width} height:${r.height}`
+
+// Free-drag via mouse just nudges the element with an ad-hoc `left`/`top`
+// (or SVG transform) offset — a live prototyping aid, not a real fix. Rather
+// than reporting only the pixel delta and leaving the agent to guess which
+// property/unit to change, send the actual computed style (before the drag
+// touched anything) and the exact before/after bounding boxes — real,
+// concrete values the agent can match against instead of estimating.
+const announcePositionMove = (el, before, after) => {
+  const dx = after.rect.x - before.rect.x
+  const dy = after.rect.y - before.rect.y
+  if (!dx && !dy) return
+
+  const parent = el.parentElement
+  const parentStyle = parent ? getComputedStyle(parent) : null
+
+  const text = `Reposition this element in the source: ${describeElement(el)}\n\n`
+    + `It was dragged by mouse (a live visual nudge, done via a temporary \`${el instanceof SVGElement ? 'transform: translate(...)' : 'position: relative; left/top'}\` `
+    + `inline override — not meant to be the real fix).\n\n`
+    + `Bounding box before: ${fmtRect(before.rect)}\n`
+    + `Bounding box after:  ${fmtRect(after.rect)}\n`
+    + `Net shift: ${dx >= 0 ? '+' : ''}${dx}px horizontally, ${dy >= 0 ? '+' : ''}${dy}px vertically\n\n`
+    + `Its computed style *before* the drag (for reference — this is the actual current styling, not the temporary override):\n`
+    + `  position: ${before.position}\n`
+    + `  margin: ${before.margin}\n`
+    + `  top: ${before.top}, left: ${before.left}\n`
+    + (parentStyle
+        ? `Its parent's layout: display: ${parentStyle.display}${parentStyle.display.includes('flex') || parentStyle.display.includes('grid') ? `, gap: ${parentStyle.gap}, flex-direction: ${parentStyle.flexDirection}` : ''}\n\n`
+        : '\n')
+    + `Find this element's source in the codebase (use the available inspection/context tools if needed). Using the computed style and parent layout above, `
+    + `apply an equivalent shift through the layout's existing mechanism (adjust an existing margin/gap/flex value to a specific new value — don't just add an arbitrary offset) `
+    + `so the bounding box matches "Bounding box after" above, then remove the temporary inline override. `
+    + `After editing, re-inspect the element and compare its new bounding box to the target above — adjust again if it doesn't match.`
+
+  showApplyViaAiButton(el, text)
+}
 
 export function Position() {
   const state = {
@@ -81,6 +125,17 @@ export function draggable({el, surface = el, cursor = 'move', clickEvent}) {
     if(e.target !== state.surface) return
     e.preventDefault()
 
+    // Snapshot the *real* computed style and bounding box before we mutate
+    // anything — this is what gets reported to the agent as ground truth.
+    const computedBefore = getComputedStyle(el)
+    state.snapshotBefore = {
+      position: computedBefore.position,
+      margin: computedBefore.margin,
+      top: computedBefore.top,
+      left: computedBefore.left,
+      rect: roundRect(el.getBoundingClientRect()),
+    }
+
     if(getComputedStyle(el).position == 'static')
       el.style.position = 'relative'
     el.style.willChange = 'top,left'
@@ -132,6 +187,13 @@ export function draggable({el, surface = el, cursor = 'move', clickEvent}) {
 
     const treatAsClick = !state.travelDistance || state.travelDistance < 5
     if (clickEvent && treatAsClick) clickEvent(e);
+
+    if (!treatAsClick && state.snapshotBefore) {
+      announcePositionMove(el, state.snapshotBefore, {
+        rect: roundRect(el.getBoundingClientRect()),
+      })
+    }
+
     state.travelDistance = 0 // reset after
   }
 

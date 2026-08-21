@@ -187,7 +187,9 @@ function formatResult(sourceInfo: any, description: string, selectedContext?: an
     networkRequests: selectedContext?.networkRequests,
     stdioMessages: selectedContext?.stdioMessages,
     relatedElements: sourceInfo.relatedElements,
-    relatedElementIds: sourceInfo.relatedElements?.map((_: any, i: number) => i),
+    relatedElementIds:
+      selectedContext?.relatedElementIds ??
+      sourceInfo.relatedElements?.map((_: any, i: number) => i),
     elementNotes: selectedContext?.elementNotes,
   });
 

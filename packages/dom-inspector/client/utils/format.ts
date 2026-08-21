@@ -216,11 +216,13 @@ export function formatElementAnnotations(options: {
 }): string {
   const { primaryNote, primaryTag, relatedElements, elementNotes } = options;
   const notes: string[] = [];
+  const isMultiSelection = !!relatedElements && relatedElements.length > 0;
 
   // Add primary element note if exists
   if (primaryNote) {
     const tag = primaryTag || "element";
-    notes.push(`- **Primary element** (${tag}): ${primaryNote}`);
+    const label = isMultiSelection ? "Selected element 1" : "Primary element";
+    notes.push(`- **${label}** (${tag}): ${primaryNote}`);
   }
 
   // Add related elements' notes if they exist
@@ -231,7 +233,7 @@ export function formatElementAnnotations(options: {
       if (note) {
         const tag = el.elementInfo?.tagName?.toLowerCase() || el.component;
         const location = el.file && el.line ? ` at ${el.file}:${el.line}` : "";
-        notes.push(`- **Related element #${idx + 1}** (${tag}${location}): ${note}`);
+        notes.push(`- **Selected element ${idx + 2}** (${tag}${location}): ${note}`);
       }
     });
   }
@@ -279,12 +281,21 @@ export function formatCopyContext(options: {
     relatedElementIds &&
     relatedElementIds.length > 0;
 
+  if (hasRelatedElements) {
+    const selectedCount = (relatedElementIds?.length ?? 0) + (includeElement ? 1 : 0);
+    output += `## Multi-Element Selection\n\n`;
+    output += `**The user manually selected ${selectedCount} elements together** — treat them as one linked group, not independent/alternative matches. Any request below applies to all of them jointly unless a note says otherwise.\n\n`;
+    output += `If the request mentions spacing/gap without specifying which elements, assume it means the gap *between* these ${selectedCount} selected elements (their shared container's \`gap\`/margin-between-siblings) — NOT the internal padding/margin inside any one of the individual selected elements.\n\n`;
+    output += `To make that change: open the source file(s) shown below for these elements, find the parent/container that renders them together (search other files for where that component is used/rendered if the container isn't in the same file), and adjust the gap/margin on that shared container rather than on the individual element(s).\n\n`;
+  }
+  
+
   if (sourceInfo && includeElement) {
     output += "## Code\n\n";
 
-    // For Region Selection, label the primary element
+    // For a multi-selection, label this as the first of the elements the user selected
     if (hasRelatedElements) {
-      output += "### Primary Element (Best Match)\n";
+      output += "### Selected Element 1 (of the group above)\n";
     }
 
     output += formatSourceInfo(sourceInfo);
@@ -293,16 +304,19 @@ export function formatCopyContext(options: {
     output += "\n";
   }
 
-  // == Related Elements (Region Selection) ==
+  // == Related Elements (part of the same multi-selection) ==
   if (
     relatedElements &&
     relatedElements.length > 0 &&
     relatedElementIds &&
     relatedElementIds.length > 0
   ) {
+    
     const selectedElements = relatedElements.filter((_, idx) => relatedElementIds.includes(idx));
     if (selectedElements.length > 0) {
-      output += "## Related Elements\n\n";
+      output += includeElement
+        ? "## Remaining Selected Elements (same group)\n\n"
+        : "## Selected Elements (multi-selection group)\n\n";
 
       // Group by file
       const grouped = selectedElements.reduce(
@@ -349,6 +363,13 @@ export function formatCopyContext(options: {
             output += `\n  - **USER NOTE**: "${note}"`;
           }
           output += "\n";
+
+          if (includeStyles && el.elementInfo) {
+            const elStyles = formatComputedStyles(el.elementInfo);
+            if (elStyles) {
+              output += `\n${elStyles}\n`;
+            }
+          }
         });
         output += "\n";
       });
@@ -357,7 +378,7 @@ export function formatCopyContext(options: {
 
   // == Styles Tab ==
   if (sourceInfo?.elementInfo && includeStyles) {
-    output += "## Styles\n\n";
+    output += hasRelatedElements ? "## Styles (Primary Element)\n\n" : "## Styles\n\n";
     output += formatComputedStyles(sourceInfo.elementInfo);
     output += "\n";
   }

@@ -118548,6 +118548,46 @@ function setupInspectorMiddleware(middlewares, config$1) {
 			res.end(JSON.stringify(config$1 || {}));
 			return;
 		}
+		if (req.url === "/__inspector__/save-picked-image" && req.method === "POST") {
+			let body = "";
+			let bodySize = 0;
+			req.on("data", (chunk) => {
+				bodySize += chunk.length;
+				if (bodySize > MAX_BODY_SIZE) {
+					res.statusCode = 413;
+					res.end("Request body too large");
+					req.destroy();
+					return;
+				}
+				body += chunk.toString();
+			});
+			req.on("end", () => {
+				if (bodySize > MAX_BODY_SIZE) return;
+				try {
+					const { dataUrl, filename } = JSON.parse(body);
+					const match = /^data:([^;]+);base64,(.+)$/.exec(dataUrl || "");
+					if (!match) {
+						res.statusCode = 400;
+						res.end("Invalid data URL");
+						return;
+					}
+					const [, mimeType, base64Data] = match;
+					const ext = path.extname(filename || "") || `.${mimeType.split("/")[1] || "bin"}`;
+					const uniqueName = `${path.basename(filename || "upload", path.extname(filename || "")).replace(/[^a-zA-Z0-9_-]/g, "_")}-${Date.now()}${ext}`;
+					const uploadsDir = path.resolve(process.cwd(), ".dom-inspector-uploads");
+					fs.mkdirSync(uploadsDir, { recursive: true });
+					const filePath = path.join(uploadsDir, uniqueName);
+					fs.writeFileSync(filePath, Buffer.from(base64Data, "base64"));
+					res.statusCode = 200;
+					res.setHeader("Content-Type", "application/json");
+					res.end(JSON.stringify({ path: path.relative(process.cwd(), filePath) }));
+				} catch (err) {
+					res.statusCode = 500;
+					res.end(`Failed to save image: ${err instanceof Error ? err.message : String(err)}`);
+				}
+			});
+			return;
+		}
 		if (req.url === "/__inspector__/log" && req.method === "POST") {
 			let body = "";
 			let bodySize = 0;

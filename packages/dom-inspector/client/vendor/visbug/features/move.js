@@ -1,7 +1,58 @@
 import $ from 'blingblingjs'
 import hotkeys from 'hotkeys-js'
-import { getNodeIndex, showEdge, swapElements, notList } from '../utilities/'
+import { getNodeIndex, showEdge, swapElements, notList, describeElement, showApplyViaAiButton } from '../utilities/'
 import { toggleWatching } from './imageswap'
+
+const roundRect = r => `x:${Math.round(r.x)} y:${Math.round(r.y)} width:${Math.round(r.width)} height:${Math.round(r.height)}`
+
+// Describes an element's position among its parent's element children, for
+// building a before/after move summary the agent can act on — including
+// concrete bounding boxes and the parent's actual layout mode, not just an
+// abstract "child #N" description that can be ambiguous (e.g. duplicate
+// classNames in a rendered list).
+const describePosition = el => {
+  if (!el || !el.parentNode) return null
+  const siblings = Array.from(el.parentNode.children)
+  const index = siblings.indexOf(el)
+  const parentStyle = getComputedStyle(el.parentNode)
+  return {
+    parent: el.parentNode,
+    index,
+    prevSibling: siblings[index - 1] || null,
+    nextSibling: siblings[index + 1] || null,
+    rect: el.getBoundingClientRect(),
+    parentLayout: {
+      display: parentStyle.display,
+      flexDirection: parentStyle.flexDirection,
+      gap: parentStyle.gap,
+    },
+  }
+}
+
+const announceMove = (el, before) => {
+  const after = describePosition(el)
+  if (!before || !after) return
+  if (before.parent === after.parent && before.index === after.index) return // no actual change
+
+  const describeSlot = pos => {
+    if (!pos) return 'nowhere (no parent)'
+    const between = `between ${pos.prevSibling ? describeElement(pos.prevSibling) : '(start)'} `
+      + `and ${pos.nextSibling ? describeElement(pos.nextSibling) : '(end)'}`
+    const layout = pos.parentLayout.display.includes('flex') || pos.parentLayout.display.includes('grid')
+      ? `, parent layout: display:${pos.parentLayout.display} flex-direction:${pos.parentLayout.flexDirection} gap:${pos.parentLayout.gap}`
+      : `, parent layout: display:${pos.parentLayout.display}`
+    return `child #${pos.index} of ${describeElement(pos.parent)}, ${between}${layout}\n  bounding box: ${roundRect(pos.rect)}`
+  }
+
+  const text = `Move this element in the source: ${describeElement(el)}\n\n`
+    + `It was: ${describeSlot(before)}\n\n`
+    + `It is now: ${describeSlot(after)}\n\n`
+    + `Find this element's source in the codebase (use the available inspection/context tools if needed) and reorder/reparent it there to match the new position — `
+    + `use the bounding boxes and parent layout above to disambiguate if multiple similar elements exist (e.g. items rendered from a list/array; if so, reorder the underlying data, not just JSX). `
+    + `After editing, re-inspect the element and compare its new bounding box to "It is now" above — adjust again if it doesn't match.`
+
+  showApplyViaAiButton(el, text)
+}
 
 const key_events = 'up,down,left,right'
 const state = {
@@ -27,8 +78,10 @@ export function Moveable(visbug) {
     e.stopPropagation()
 
     visbug.selection().forEach(el => {
+      const before = describePosition(el)
       moveElement(el, key)
       updateFeedback(el)
+      announceMove(el, before)
     })
   })
 
@@ -152,6 +205,7 @@ const dragStart = ({target}) => {
     return
 
   state.drag.src = target
+  state.drag.src_before = describePosition(target)
   state.hover.dropzones.push(createDropzoneUI(target))
   state.drag.siblings.get(target).style.opacity = 0.01
 
@@ -182,16 +236,21 @@ const dragOver = e => {
 const dragDrop = e => {
   if (!state.drag.src) return
 
-  state.drag.src.removeAttribute('visbug-drag-src')
-  ghostBuster(state.drag.src)
+  const src = state.drag.src
+  const before = state.drag.src_before
 
-  if (state.drag.siblings.has(state.drag.src))
-    state.drag.siblings.get(state.drag.src).style.opacity = null
+  src.removeAttribute('visbug-drag-src')
+  ghostBuster(src)
+
+  if (state.drag.siblings.has(src))
+    state.drag.siblings.get(src).style.opacity = null
 
   state.hover.dropzones.forEach(zone =>
     zone.remove())
 
   state.drag.src = null
+  state.drag.src_before = null
+  announceMove(src, before)
 }
 
 const siblingHoverIn = ({target}) => {

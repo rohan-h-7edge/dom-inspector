@@ -265,15 +265,20 @@ export const ContextPicker: React.FC<ContextPickerProps> = ({
     onSelectionChange({ ...selectedContext, networkIds: ids });
   };
 
+  const hasRelatedElementsForCount = !!sourceInfo?.relatedElements?.length;
+
   const totalSelected =
-    (selectedContext.includeElement ? 1 : 0) +
+    (hasRelatedElementsForCount
+      ? selectedContext.relatedElementIds.length + (selectedContext.includeElement ? 1 : 0)
+      : selectedContext.includeElement
+        ? 1
+        : 0) +
     (selectedContext.includeStyles ? 1 : 0) +
     (selectedContext.includeScreenshot ? 1 : 0) +
     (selectedContext.includePageInfo ? 1 : 0) +
     selectedContext.consoleIds.length +
     selectedContext.networkIds.length +
-    selectedContext.stdioIds.length +
-    selectedContext.relatedElementIds.length;
+    selectedContext.stdioIds.length;
 
   const toggleElement = () => {
     onSelectionChange({ ...selectedContext, includeElement: !selectedContext.includeElement });
@@ -394,12 +399,24 @@ export const ContextPicker: React.FC<ContextPickerProps> = ({
       .map((m) => `[${m.stdioid}] ${m.stream}: ${truncate(m.data, MAX_MSG_LEN)}`)
       .join("\n");
 
+    const relatedCount = sourceInfo.relatedElements?.length ?? 0;
+    const selectionDescription =
+      relatedCount > 0
+        ? `I have selected ${relatedCount + 1} elements together (a multi-selection) and am inspecting them as a group. Primary element:`
+        : "I am inspecting the following element:";
+
     const prompt = `
-I am inspecting the following element:
+${selectionDescription}
 ${userInput ? `Context/Interests: ${userInput}` : ""}
 Tag: ${sourceInfo.elementInfo?.tagName}
 File: ${sourceInfo.file}:${sourceInfo.line}
-Component: ${sourceInfo.component}
+Component: ${sourceInfo.component}${
+      relatedCount > 0
+        ? `\nOther selected elements: ${sourceInfo.relatedElements
+            ?.map((el) => `${el.elementInfo?.tagName ?? el.component} (${el.file}:${el.line})`)
+            .join(", ")}`
+        : ""
+    }
 
 Available Console Logs (Recent ${MAX_RECENT_ITEMS}):
 ${recentConsole || "None"}
@@ -445,9 +462,19 @@ IMPORTANT: For this task, you MUST call the "context_selector" tool to return yo
   // Extract typography styles from sourceInfo
   const typographyStyles = sourceInfo?.elementInfo?.computedStyles?.typography;
 
+  const hasRelatedElements = !!sourceInfo?.relatedElements?.length;
+
   // Tab configuration (KISS: data-driven rendering)
   const tabs: TabConfig[] = [
-    { id: "code", label: "Code", selectedCount: selectedContext.includeElement ? 1 : 0 },
+    {
+      id: "code",
+      label: "Code",
+      selectedCount: hasRelatedElements
+        ? selectedContext.relatedElementIds.length + (selectedContext.includeElement ? 1 : 0)
+        : selectedContext.includeElement
+          ? 1
+          : 0,
+    },
     { id: "styles", label: "Styles", selectedCount: selectedContext.includeStyles ? 1 : 0 },
     { id: "page", label: "Page", selectedCount: selectedContext.includePageInfo ? 1 : 0 },
     { id: "screenshot", label: "Visual", selectedCount: selectedContext.includeScreenshot ? 1 : 0 },
@@ -577,20 +604,24 @@ IMPORTANT: For this task, you MUST call the "context_selector" tool to return yo
           {activeTab === "code" && (
             <div className="p-2 space-y-1">
               {(() => {
-                // Unified: treat single element as a list of one
-                const elements =
-                  sourceInfo?.relatedElements && sourceInfo.relatedElements.length > 0
-                    ? sourceInfo.relatedElements
-                    : sourceInfo
-                      ? [sourceInfo]
-                      : [];
+                const isRegionSelection = !!sourceInfo?.relatedElements?.length;
 
-                const isRegionSelection =
-                  sourceInfo?.relatedElements && sourceInfo.relatedElements.length > 0;
+                // Unified: primary element plus any related elements from
+                // multi-selection, all shown together. idx -1 marks the
+                // primary (bound to includeElement); other indices map 1:1
+                // onto relatedElementIds so existing selection state stays valid.
+                const elements: Array<{ el: InspectedElement; idx: number }> = isRegionSelection
+                  ? [
+                      ...(sourceInfo ? [{ el: sourceInfo, idx: -1 }] : []),
+                      ...(sourceInfo!.relatedElements ?? []).map((el, idx) => ({ el, idx })),
+                    ]
+                  : sourceInfo
+                    ? [{ el: sourceInfo, idx: -1 }]
+                    : [];
 
                 // Group elements by file
                 const grouped = elements.reduce(
-                  (acc, el, idx) => {
+                  (acc, { el, idx }) => {
                     const file = el.file || "unknown";
                     if (!acc[file]) acc[file] = [];
                     acc[file].push({ el, idx });
@@ -632,12 +663,12 @@ IMPORTANT: For this task, you MUST call the "context_selector" tool to return yo
                                 <input
                                   type="checkbox"
                                   checked={
-                                    isRegionSelection
-                                      ? selectedContext.relatedElementIds.includes(idx)
-                                      : selectedContext.includeElement
+                                    idx === -1
+                                      ? selectedContext.includeElement
+                                      : selectedContext.relatedElementIds.includes(idx)
                                   }
                                   onChange={() =>
-                                    isRegionSelection ? toggleRelatedElement(idx) : toggleElement()
+                                    idx === -1 ? toggleElement() : toggleRelatedElement(idx)
                                   }
                                   className="mt-0.5 rounded border-neutral-200 dark:border-neutral-700"
                                 />
@@ -819,6 +850,42 @@ IMPORTANT: For this task, you MUST call the "context_selector" tool to return yo
                   )}
                 </div>
               </label>
+
+              {/* Per-related-element styles, only for elements actually selected in the Code tab */}
+              {hasRelatedElements &&
+                selectedContext.includeStyles &&
+                sourceInfo?.relatedElements
+                  ?.filter((_, idx) => selectedContext.relatedElementIds.includes(idx))
+                  .map((el, i) => {
+                    const t = el.elementInfo?.computedStyles?.typography;
+                    if (!t) return null;
+                    return (
+                      <div
+                        key={i}
+                        className="ml-6 p-2 rounded border border-neutral-200 dark:border-neutral-700 text-xs"
+                      >
+                        <div className="font-mono text-neutral-800 dark:text-neutral-200 mb-1">
+                          {el.component} ({el.line}:{el.column})
+                        </div>
+                        <div className="text-neutral-500 dark:text-neutral-400 space-y-0.5">
+                          <div className="flex gap-2">
+                            <span className="text-neutral-500/70 dark:text-neutral-400/70">Font:</span>
+                            <span className="font-mono truncate">
+                              {t.fontSize} {t.fontFamily}
+                            </span>
+                          </div>
+                          <div className="flex gap-2 items-center">
+                            <span className="text-neutral-500/70 dark:text-neutral-400/70">Color:</span>
+                            <span
+                              className="inline-block w-3 h-3 rounded border border-neutral-200 dark:border-neutral-700"
+                              style={{ backgroundColor: t.color }}
+                            />
+                            <span className="font-mono">{t.color}</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
             </div>
           )}
 

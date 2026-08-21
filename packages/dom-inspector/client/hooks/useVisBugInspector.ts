@@ -76,6 +76,7 @@ export const useVisBugInspector = ({
         apis: info.apis,
         line: info.line,
         column: info.column,
+        element: el,
         elementInfo: info.elementInfo
           ? {
               tagName: info.elementInfo.tagName,
@@ -83,6 +84,7 @@ export const useVisBugInspector = ({
               className: info.elementInfo.className,
               id: info.elementInfo.id,
               styles: info.elementInfo.styles || {},
+              computedStyles: info.elementInfo.computedStyles,
             }
           : undefined,
       } as InspectedElement;

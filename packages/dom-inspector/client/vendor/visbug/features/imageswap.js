@@ -1,9 +1,133 @@
 import $ from 'blingblingjs'
 import { getStyle } from '../utilities/'
+import { getDevServerBaseUrl } from '../../../utils/config-loader'
 
 let imgs      = []
   , overlays  = []
   , dragItem
+
+// == "Apply via AI" play button, shown after a drag-and-drop image swap ==
+
+let activePlayButton = null
+let activePlayButtonAction = null
+let playButtonTimeout = null
+
+// VisBug's own click-to-select handler intercepts (preventDefault +
+// stopPropagation) every plain click on the page at document.body's CAPTURE
+// phase (see selectable.js's on_click) — and every whitelisted exemption it
+// checks (`isOffBounds`: vis-bug, visbug-metatip, etc.) is itself a real
+// registered custom element with its own closed shadow root and no <slot>,
+// so mounting our plain button *inside* one of them would exempt it from
+// interception but also make it invisible (shadow roots don't render light-
+// DOM children without a slot). Instead: intercept the click ourselves on
+// `document` (one level higher, so we run first) and run our own action
+// directly, before VisBug's document.body listener ever sees the event.
+document.addEventListener('click', e => {
+  if (activePlayButton && (e.target === activePlayButton || activePlayButton.contains(e.target))) {
+    e.preventDefault()
+    e.stopPropagation()
+    activePlayButtonAction && activePlayButtonAction()
+  }
+}, true)
+
+const describeElement = (el) => {
+  const id = el.id ? `#${el.id}` : ''
+  const classes = el.className && typeof el.className === 'string'
+    ? '.' + el.className.trim().split(/\s+/).join('.')
+    : ''
+  return `<${el.nodeName.toLowerCase()}${id}${classes}>`
+}
+
+const removePlayButton = () => {
+  if (activePlayButton) {
+    activePlayButton.remove()
+    activePlayButton = null
+  }
+  activePlayButtonAction = null
+  clearTimeout(playButtonTimeout)
+}
+
+// Browsers only expose a File object for a locally picked/dropped image,
+// never a real filesystem path — so a data URL is all we have client-side.
+// Rather than pasting that (potentially huge) base64 blob into the chat
+// prompt, save it to disk via the dev server and hand the agent a real path.
+const savePickedImage = async (dataUrl, filename) => {
+  const res = await fetch(`${getDevServerBaseUrl()}/__inspector__/save-picked-image`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ dataUrl, filename }),
+  })
+  if (!res.ok) throw new Error(`Failed to save image (${res.status})`)
+  const { path } = await res.json()
+  return path
+}
+
+const showImageSwapPlayButton = (target, cssProp, oldSrc, newSrc, filename) => {
+  if (!oldSrc || oldSrc === newSrc) return
+  removePlayButton()
+
+  const rect = target.getBoundingClientRect()
+  const btn = document.createElement('button')
+  btn.textContent = '▶ Apply via AI'
+  btn.setAttribute('type', 'button')
+  Object.assign(btn.style, {
+    // VisBug draws its own selection tag/label at the top-left of a
+    // selected element's bounding box — anchoring bottom-right instead
+    // avoids colliding with it.
+    position: 'fixed',
+    top: `${Math.min(window.innerHeight - 40, rect.bottom + 6)}px`,
+    left: `${Math.min(window.innerWidth - 140, Math.max(8, rect.right - 130))}px`,
+    zIndex: 2147483647,
+    background: '#22c55e',
+    color: '#fff',
+    border: 'none',
+    borderRadius: '9999px',
+    padding: '6px 12px',
+    fontSize: '12px',
+    fontFamily: 'system-ui, -apple-system, sans-serif',
+    fontWeight: '600',
+    cursor: 'pointer',
+    boxShadow: '0 2px 10px rgba(0,0,0,.3)',
+  })
+
+  activePlayButtonAction = async () => {
+    const isDataUrl = newSrc.startsWith('data:')
+    const propLabel = cssProp === 'background-image' ? 'CSS `background-image`' : '`<img>` `src`'
+
+    let text
+    if (isDataUrl) {
+      let savedPath
+      try {
+        savedPath = await savePickedImage(newSrc, filename)
+      } catch (err) {
+        console.error('[dom-inspector] Failed to save picked image:', err)
+        return // leave the button up so the user can retry
+      }
+
+      text = `Update this element's image: ${describeElement(target)}\n\n`
+        + `The user picked a new local image to replace the one currently referenced at \`${oldSrc}\`. `
+        + `It has already been saved to the project at \`${savedPath}\` (relative to the project root) — use that file directly, do not ask the user for it.\n\n`
+        + `Move/rename it into the appropriate assets location (following the same convention as the asset currently at \`${oldSrc}\`) if needed, `
+        + `then find this element's source in the codebase (use the available inspection/context tools if needed) and update the ${propLabel} to reference the new file.`
+    } else {
+      text = `Update this element's image: ${describeElement(target)}\n\n`
+        + `Change the ${propLabel} from \`${oldSrc}\` to \`${newSrc}\`\n\n`
+        + `Find this element's source in the codebase (use the available inspection/context tools if needed) and apply this change there.`
+    }
+
+    target.dispatchEvent(new CustomEvent('metatip-style-edit', {
+      bubbles: true,
+      detail: { text },
+    }))
+
+    removePlayButton()
+  }
+
+  document.body.appendChild(btn)
+  activePlayButton = btn
+  // Auto-dismiss if the user doesn't act on it.
+  playButtonTimeout = setTimeout(removePlayButton, 10000)
+}
 
 const state = {
   watching: true,
@@ -28,6 +152,7 @@ const initWatchers = imgs => {
   imgs.on('dragover', onDragOver)
   imgs.on('dragleave', onDragLeave)
   imgs.on('drop', onDrop)
+  imgs.on('click', onImageClick)
   $(document.body).on('dragover', onDragOver)
   $(document.body).on('dragleave', onDragLeave)
   $(document.body).on('drop', onDrop)
@@ -39,12 +164,66 @@ const clearWatchers = imgs => {
   imgs.off('dragover', onDragOver)
   imgs.off('dragleave', onDragLeave)
   imgs.off('drop', onDrop)
+  imgs.off('click', onImageClick)
   $(document.body).off('dragover', onDragOver)
   $(document.body).off('dragleave', onDragLeave)
   $(document.body).off('drop', onDrop)
   $(document.body).off('dragstart', onDragStart)
   $(document.body).off('dragend', onDragEnd)
   imgs = []
+}
+
+// == Click-to-pick — an alternative to drag-and-drop for choosing an image ==
+
+let filePickerInput = null
+let filePickerTarget = null
+
+const getFilePickerInput = () => {
+  if (filePickerInput) return filePickerInput
+
+  filePickerInput = document.createElement('input')
+  filePickerInput.type = 'file'
+  filePickerInput.accept = 'image/*'
+  filePickerInput.style.cssText = 'position:fixed;top:-9999px;left:-9999px;'
+  filePickerInput.addEventListener('change', onFilePicked)
+  document.body.appendChild(filePickerInput)
+  return filePickerInput
+}
+
+// VisBug's own selection tool captures plain clicks at document.body (capture
+// phase) to select/deselect elements — except when Alt is held, which it
+// explicitly leaves alone (see selectable.js's on_click). So Alt+Click is the
+// one interaction guaranteed to actually reach the image instead of being
+// swallowed by element selection.
+const onImageClick = e => {
+  if (!state.watching || !e.altKey) return
+  e.preventDefault()
+  e.stopPropagation()
+
+  filePickerTarget = e.currentTarget
+  const input = getFilePickerInput()
+  input.value = ''
+  input.click()
+}
+
+const onFilePicked = async e => {
+  const file = e.target.files && e.target.files[0]
+  const target = filePickerTarget
+  filePickerTarget = null
+  if (!file || !target) return
+
+  const src = await previewFile(file)
+
+  if (target.nodeName === 'IMG') {
+    const oldSrc = target.currentSrc || target.src
+    updateContentImage(target, src)
+    showImageSwapPlayButton(target, 'src', oldSrc, src, file.name)
+  }
+  else if (window.getComputedStyle(target).backgroundImage !== 'none') {
+    const oldBg = window.getComputedStyle(target).backgroundImage
+    target.style.backgroundImage = `url(${src})`
+    showImageSwapPlayButton(target, 'background-image', oldBg, `url(${src})`, file.name)
+  }
 }
 
 const previewFile = file => {
@@ -102,33 +281,47 @@ const onDrop = async e => {
   e.stopPropagation()
   e.preventDefault()
 
-  const srcs = await getTransferData(dragItem, e)
+  const { srcs, filenames } = await getTransferData(dragItem, e)
 
   if (srcs.length) {
     const selectedImages = $('img[data-selected=true], [data-selected=true] > img')
     const targetImages   = getTargetContentImages(selectedImages, e)
 
     if (targetImages.length) {
+      // `lastSrc` was cached (before any preview swap) by cacheImageState()
+      // during dragover — the true original, if this image was previewed.
+      const oldSrcs = targetImages.map(img => img.lastSrc || img.currentSrc || img.src)
       updateContentImages(targetImages, srcs)
+      targetImages.forEach((img, i) =>
+        showImageSwapPlayButton(img, 'src', oldSrcs[i], srcs[i % srcs.length], filenames[i % Math.max(filenames.length, 1)]))
     }
     else {
       const bgImages = getTargetBackgroundImages(imgs, e)
+      const oldBgs = bgImages.map(img => img.lastBackgroundImage || window.getComputedStyle(img).backgroundImage)
       updateBackgroundImages(bgImages, srcs[0])
+      bgImages.forEach((img, i) => {
+        if (window.getComputedStyle(img).backgroundImage !== 'none') {
+          showImageSwapPlayButton(img, 'background-image', oldBgs[i], `url(${srcs[0]})`, filenames[0])
+        }
+      })
     }
   }
 
   hideOverlays()
 }
 
+// Returns { srcs, filenames } — filenames is `[]` for in-page image drags
+// (already a real URL, nothing to upload) and has one entry per dropped
+// file otherwise, used later to name the saved asset.
 const getTransferData = async (dragItem, e) => {
   if (dragItem)
-    return [dragItem.currentSrc]
+    return { srcs: [dragItem.currentSrc], filenames: [] }
 
-  return e.dataTransfer.files.length
-  ? await Promise.all([...e.dataTransfer.files]
-    .filter(file => file.type.includes('image'))
-    .map(previewFile))
-    : []
+  if (!e.dataTransfer.files.length) return { srcs: [], filenames: [] }
+
+  const files = [...e.dataTransfer.files].filter(file => file.type.includes('image'))
+  const srcs = await Promise.all(files.map(previewFile))
+  return { srcs, filenames: files.map(f => f.name) }
 }
 
 const getTargetContentImages = (selected, e) =>

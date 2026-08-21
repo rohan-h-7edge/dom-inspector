@@ -1,6 +1,6 @@
 import $ from 'blingblingjs'
 import hotkeys from 'hotkeys-js'
-import { preferredNotation } from './color.js'
+import { preferredNotation, toHexColor } from './color.js'
 import { queryPage } from './search'
 import { getStyles, camelToDash, isOffBounds,
          deepElementFromPoint, getShadowValues,
@@ -151,18 +151,20 @@ const render = (el, tip = document.createElement('visbug-metatip')) => {
         : true
     )
     .map(style => {
+      // `swatch` holds any non-editable decoration (color dot, gradient
+      // preview) that sits alongside the value; `value` stays plain text so
+      // every property — including color and font — can be edited in place.
+      style.swatch = ''
+
       if (style.prop.includes('color') || style.prop.includes('background-color') || style.prop.includes('border-color') || style.prop.includes('Color') || style.prop.includes('fill') || style.prop.includes('stroke')) {
-        style.value = `
-          <span color style="background-color:${style.value};"></span>
-          <span color-value>${preferredNotation(style.value, colormode)}</span>
-        `
+        style.colorHex = toHexColor(style.value)
+        style.swatch = `<span color style="background-color:${style.value};"></span>`
+        style.value = preferredNotation(style.value, colormode)
       }
 
-      if (style.prop.includes('background-image'))
-        style.value = `
-          <span color gradient style="--_bg:${style.value};"></span>
-          <span color-value>${style.value}</span>
-        `
+      if (style.prop.includes('background-image')) {
+        style.swatch = `<span color gradient style="--_bg:${style.value};"></span>`
+      }
 
       if (style.prop.includes('box-shadow')) {
         const [, color, x, y, blur, spread] = getShadowValues(style.value)
@@ -175,14 +177,14 @@ const render = (el, tip = document.createElement('visbug-metatip')) => {
       }
 
       if (style.prop.includes('font-family'))
-        style.value = `<span string value>${firstUsableFontFromFamily(style.value)}</span>`
+        style.value = firstUsableFontFromFamily(style.value)
 
       if (style.prop.includes('grid-template-areas'))
-        style.value = style.value.replace(/" "/g, '"<br>"')
+        style.value = style.value.replace(/" "/g, '"\n"')
 
-      // check if style is inline style, show indicator
-      if (el.getAttribute('style') && el.getAttribute('style').includes(style.prop))
-        style.value = `<span local-change>${style.value}</span>`
+      // Flag inline/local styles so the element can show the indicator
+      // without wrapping (and corrupting) the editable text itself.
+      style.isLocalChange = !!(el.getAttribute('style') && el.getAttribute('style').includes(style.prop))
 
       return style
     })

@@ -13,7 +13,7 @@ import { cn } from "./lib/utils";
 import { useInspectorTheme } from "./context/ThemeContext";
 import { InspectorContainerContext } from "./context/InspectorContainerContext";
 import { useInspectionProgress } from "./hooks/useInspectionProgress";
-import { captureElementScreenshot } from "./utils/screenshot";
+import { captureElementScreenshot, captureElementsScreenshot } from "./utils/screenshot";
 import { saveInspectionItems, loadInspectionItems } from "./utils/inspectionStorage";
 import { getSourceInfo } from "./sourceDetector";
 import inspectorStyles from "./styles.css";
@@ -320,7 +320,16 @@ const InspectorContainer: React.FC<InspectorContainerProps> = ({ shadowRoot, mou
       });
 
       if (element.isConnected) {
-        const dataUrl = await captureElementScreenshot(element);
+        // For a multi-selection, capture the union of all selected elements'
+        // bounding boxes rather than just the primary element's box.
+        const relatedDomElements = (info.relatedElements ?? [])
+          .map((el) => el.element)
+          .filter((el): el is Element => !!el && el.isConnected);
+
+        const dataUrl =
+          relatedDomElements.length > 0
+            ? await captureElementsScreenshot([element, ...relatedDomElements])
+            : await captureElementScreenshot(element);
         setScreenshot(dataUrl);
       } else {
         setScreenshot("");
@@ -436,6 +445,7 @@ const InspectorContainer: React.FC<InspectorContainerProps> = ({ shadowRoot, mou
                 className: el.elementInfo.className,
                 id: el.elementInfo.id,
                 styles: el.elementInfo.styles || {},
+                computedStyles: el.elementInfo.computedStyles,
               }
             : undefined,
           note: el.note,

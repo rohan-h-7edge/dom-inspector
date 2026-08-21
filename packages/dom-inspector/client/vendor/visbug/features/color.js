@@ -172,6 +172,16 @@ export function ColorPicker(pallete, selectorEngine) {
   }
 }
 
+// `<input type="color">` only accepts strict `#rrggbb` — used to seed the
+// native color picker opened from the metatip's color swatch.
+export const toHexColor = (color) => {
+  try {
+    return new Color(color).to('srgb').toString({ format: 'hex' })
+  } catch {
+    return '#000000'
+  }
+}
+
 export const preferredNotation = (color, preference) => {
   const isRGB = color.startsWith('rgb')
 

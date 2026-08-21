@@ -193,11 +193,16 @@ function formatResult(sourceInfo: any, description: string, selectedContext?: an
     elementNotes: selectedContext?.elementNotes,
   });
 
-  // Add task instructions (MCP-specific)
+  // Add task instructions (MCP-specific). Tools you may need are named together
+  // here so they can be resolved in one batched lookup instead of one per step:
+  // chrome_devtools, get_console_messages, get_network_requests, get_stdio_messages,
+  // execute_page_script, update_inspection_status.
   output += `
 
 ## Your Task
-1. Investigate the issue using browser diagnostics tools: prefer 'chrome_devtools' when available; otherwise use 'get_console_messages' / 'get_network_requests' (and 'get_stdio_messages' if relevant)
+Tools you may need (resolve them together, not one at a time): 'chrome_devtools' (preferred for browser diagnostics), 'get_console_messages', 'get_network_requests', 'get_stdio_messages', 'execute_page_script', 'update_inspection_status'.
+
+1. Investigate the issue using browser diagnostics: prefer 'chrome_devtools' when available; otherwise 'get_console_messages' / 'get_network_requests' (and 'get_stdio_messages' if relevant)
 2. Use 'execute_page_script' to query element state if needed
 3. Update status with 'update_inspection_status':
    - "in-progress" with progress details while investigating

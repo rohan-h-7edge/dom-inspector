@@ -117588,12 +117588,56 @@ Returns: array of element contexts (max 50).`,
 			} }
 		}
 	},
+	verify_dom_position: {
+		name: "verify_dom_position",
+		description: `Diff a live element's position/box against an expected spec (emitted by the move/position features). Returns { pass, mismatches, actual }. Authoritative check — use instead of eyeballing rects.`,
+		inputSchema: {
+			type: "object",
+			properties: {
+				selector: {
+					type: "string",
+					description: "CSS selector for the element, post-edit."
+				},
+				expected: {
+					type: "object",
+					description: "Spec object copied verbatim from the 'Apply via AI' prompt: index, siblingCount, elementRect{x,y,width,height}, parentRect{width,height}, margin, rectTolerancePx."
+				}
+			},
+			required: ["selector", "expected"]
+		}
+	},
 	get_page_info: {
 		name: "get_page_info",
 		description: "Get page overview with accessibility tree. Returns URL, title, viewport, document size, and semantic structure (landmarks, headings, forms, links). Start here to understand the page.",
 		inputSchema: {
 			type: "object",
 			properties: {}
+		}
+	},
+	a11y_audit: {
+		name: "a11y_audit",
+		description: `Audit accessibility of the live page (or a subtree). Walks visible elements and reports concrete violations, not just present attributes:
+- img-alt: <img> missing alt
+- accessible-name: interactive element with no accessible name (text, aria-label, aria-labelledby, or <label>)
+- color-contrast: text failing WCAG2.1 AA contrast
+- duplicate-id: repeated id attribute
+- tabindex-order / tabindex-removed: positive tabindex, or negative tabindex on an interactive element
+- aria-hidden-focusable: aria-hidden="true" on a still-focusable element
+- heading-order: skipped heading level (e.g. h1 -> h3)
+
+Returns { totalViolations, bySeverity, violations: [{ rule, severity, selector, message, details? }] }.`,
+		inputSchema: {
+			type: "object",
+			properties: {
+				selector: {
+					type: "string",
+					description: "CSS selector to scope the audit to a subtree. Defaults to document.body (whole page)."
+				},
+				includeContrast: {
+					type: "boolean",
+					description: "Whether to run color-contrast checks (more expensive). Defaults to true."
+				}
+			}
 		}
 	}
 };
@@ -117877,7 +117921,9 @@ async function createInspectorMcpServer(serverContext) {
 		TOOL_SCHEMAS.list_inspections,
 		TOOL_SCHEMAS.update_inspection_status,
 		TOOL_SCHEMAS.execute_page_script,
-		TOOL_SCHEMAS.get_page_info
+		TOOL_SCHEMAS.get_page_info,
+		TOOL_SCHEMAS.verify_dom_position,
+		TOOL_SCHEMAS.a11y_audit
 	]);
 	const mapUserPrompts = () => userPrompts.map((p$1) => ({
 		name: p$1.name,

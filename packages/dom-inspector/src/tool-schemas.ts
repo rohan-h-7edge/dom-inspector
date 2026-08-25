@@ -150,14 +150,14 @@ Returns: array of element contexts (max 50).`,
 
   verify_dom_position: {
     name: "verify_dom_position",
-    description: `Diff a live element's position/box against an expected spec (emitted by the move/position features). Returns { pass, mismatches, actual }. Authoritative check — use instead of eyeballing rects.`,
+    description: `Diff a live element's position/box against an expected spec (emitted by the move/position/margin/padding features). Returns { pass, mismatches, actual }. Authoritative check — use instead of eyeballing rects.`,
     inputSchema: {
       type: "object" as const,
       properties: {
         selector: { type: "string", description: "CSS selector for the element, post-edit." },
         expected: {
           type: "object",
-          description: "Spec object copied verbatim from the 'Apply via AI' prompt: index, siblingCount, elementRect{x,y,width,height}, parentRect{width,height}, margin, rectTolerancePx.",
+          description: "Spec object copied verbatim from the 'Apply via AI' prompt: index, siblingCount, elementRect{x,y,width,height}, parentRect{width,height}, margin, padding, rectTolerancePx.",
         },
       },
       required: ["selector", "expected"] as string[],

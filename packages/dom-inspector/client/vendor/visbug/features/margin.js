@@ -1,5 +1,5 @@
 import hotkeys from 'hotkeys-js'
-import { metaKey, getStyle, getSide, showHideSelected } from '../utilities/'
+import { metaKey, getStyle, getSide, showHideSelected, describeElement, showApplyViaAiButton, buildStableSelector } from '../utilities/'
 
 const key_events = 'up,down,left,right'
   .split(',')
@@ -15,12 +15,18 @@ export function Margin(visbug) {
     if (e.cancelBubble) return
 
     e.preventDefault()
-    pushElement(visbug.selection(), handler.key)
+    visbug.selection().forEach(el => {
+      const before = getMarginSides(el)
+      pushElement([el], handler.key)
+      announceMarginChange(el, before)
+    })
   })
 
   hotkeys(command_events, (e, handler) => {
     e.preventDefault()
+    const before = new Map(visbug.selection().map(el => [el, getMarginSides(el)]))
     pushAllElementSides(visbug.selection(), handler.key)
+    before.forEach((sides, el) => announceMarginChange(el, sides))
   })
 
   visbug.onSelectedUpdate(paintBackgrounds)
@@ -63,6 +69,35 @@ export function pushAllElementSides(els, keycommand) {
 
   'up,down,left,right'.split(',')
     .forEach(side => pushElement(els, spoof + side))
+}
+
+const getMarginSides = el => ({
+  top:    getStyle(el, 'marginTop'),
+  right:  getStyle(el, 'marginRight'),
+  bottom: getStyle(el, 'marginBottom'),
+  left:   getStyle(el, 'marginLeft'),
+})
+
+// After a hotkey-driven margin nudge, offer to carry the same change into
+// the element's source (mirrors move.js's announceMove for reordering).
+const announceMarginChange = (el, before) => {
+  const after = getMarginSides(el)
+  if (before.top === after.top && before.right === after.right
+    && before.bottom === after.bottom && before.left === after.left) return
+
+  const selector = buildStableSelector(el)
+  const margin = `${after.top} ${after.right} ${after.bottom} ${after.left}`
+  const expected = { margin }
+
+  const text = `Update this element's margin in the source: ${describeElement(el)}\n\n`
+    + `It was: margin: ${before.top} ${before.right} ${before.bottom} ${before.left}\n\n`
+    + `It is now: margin: ${margin}\n\n`
+    + `Find this element's source in the codebase (use the available inspection/context tools if needed) and change its margin there to match — `
+    + `ONLY change the margin. Do not add, remove, or edit any other CSS, className, inline style, or markup on this element as part of this change. `
+    + `After editing, call the verify_dom_position tool with the selector and expected spec below — do not consider this change done until it reports pass:true.\n\n`
+    + `verify_dom_position({ selector: ${JSON.stringify(selector)}, expected: ${JSON.stringify(expected)} })`
+
+  showApplyViaAiButton(el, text)
 }
 
 function paintBackgrounds(els) {

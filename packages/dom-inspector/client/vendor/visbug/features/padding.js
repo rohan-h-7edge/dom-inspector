@@ -1,5 +1,5 @@
 import hotkeys from 'hotkeys-js'
-import { metaKey, getStyle, getSide, showHideSelected, expandBorders } from '../utilities/'
+import { metaKey, getStyle, getSide, showHideSelected, expandBorders, describeElement, showApplyViaAiButton, buildStableSelector } from '../utilities/'
 
 const key_events = 'up,down,left,right'
   .split(',')
@@ -15,12 +15,18 @@ export function Padding(visbug) {
     if (e.cancelBubble) return
 
     e.preventDefault()
-    padElement(visbug.selection(), handler.key)
+    visbug.selection().forEach(el => {
+      const before = getPaddingSides(el)
+      padElement([el], handler.key)
+      announcePaddingChange(el, before)
+    })
   })
 
   hotkeys(command_events, (e, handler) => {
     e.preventDefault()
+    const before = new Map(visbug.selection().map(el => [el, getPaddingSides(el)]))
     padAllElementSides(visbug.selection(), handler.key)
+    before.forEach((sides, el) => announcePaddingChange(el, sides))
   })
 
   visbug.onSelectedUpdate(paintBackgrounds)
@@ -63,6 +69,35 @@ export function padAllElementSides(els, keycommand) {
 
   'up,down,left,right'.split(',')
     .forEach(side => padElement(els, spoof + side))
+}
+
+const getPaddingSides = el => ({
+  top:    getStyle(el, 'paddingTop'),
+  right:  getStyle(el, 'paddingRight'),
+  bottom: getStyle(el, 'paddingBottom'),
+  left:   getStyle(el, 'paddingLeft'),
+})
+
+// After a hotkey-driven padding nudge, offer to carry the same change into
+// the element's source (mirrors move.js's announceMove for reordering).
+const announcePaddingChange = (el, before) => {
+  const after = getPaddingSides(el)
+  if (before.top === after.top && before.right === after.right
+    && before.bottom === after.bottom && before.left === after.left) return
+
+  const selector = buildStableSelector(el)
+  const padding = `${after.top} ${after.right} ${after.bottom} ${after.left}`
+  const expected = { padding }
+
+  const text = `Update this element's padding in the source: ${describeElement(el)}\n\n`
+    + `It was: padding: ${before.top} ${before.right} ${before.bottom} ${before.left}\n\n`
+    + `It is now: padding: ${padding}\n\n`
+    + `Find this element's source in the codebase (use the available inspection/context tools if needed) and change its padding there to match — `
+    + `ONLY change the padding. Do not add, remove, or edit any other CSS, className, inline style, or markup on this element as part of this change. `
+    + `After editing, call the verify_dom_position tool with the selector and expected spec below — do not consider this change done until it reports pass:true.\n\n`
+    + `verify_dom_position({ selector: ${JSON.stringify(selector)}, expected: ${JSON.stringify(expected)} })`
+
+  showApplyViaAiButton(el, text)
 }
 
 function paintBackgrounds(els) {

@@ -663,6 +663,7 @@ ${a11yTree.length > 0 ? a11yTree.join("\n") : "(empty or no semantic structure)"
       const parentRect = parent.getBoundingClientRect();
       const style = getComputedStyle(el);
       const margin = `${style.marginTop} ${style.marginRight} ${style.marginBottom} ${style.marginLeft}`;
+      const padding = `${style.paddingTop} ${style.paddingRight} ${style.paddingBottom} ${style.paddingLeft}`;
       const round = (r: DOMRect) => ({
         x: Math.round(r.x),
         y: Math.round(r.y),
@@ -704,6 +705,9 @@ ${a11yTree.length > 0 ? a11yTree.join("\n") : "(empty or no semantic structure)"
       if (expected.margin !== undefined && expected.margin !== margin)
         mismatches.push(`margin: expected "${expected.margin}", got "${margin}"`);
 
+      if (expected.padding !== undefined && expected.padding !== padding)
+        mismatches.push(`padding: expected "${expected.padding}", got "${padding}"`);
+
       return {
         pass: mismatches.length === 0,
         mismatches,
@@ -713,6 +717,7 @@ ${a11yTree.length > 0 ? a11yTree.join("\n") : "(empty or no semantic structure)"
           rect: round(rect),
           parentRect: round(parentRect),
           margin,
+          padding,
         },
       };
     }

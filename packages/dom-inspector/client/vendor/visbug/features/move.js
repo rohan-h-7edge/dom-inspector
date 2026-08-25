@@ -66,7 +66,7 @@ const announceMove = (el, before) => {
     + `Find this element's source in the codebase (use the available inspection/context tools if needed) and reorder/reparent it there to match the new position — `
     + `ONLY change the ordering/parenting. Do not add, remove, or edit any CSS, className, inline style, or wrapper markup on this element, its siblings, or its parent as part of this change — `
     + `use the bounding boxes and parent layout above to disambiguate if multiple similar elements exist (e.g. items rendered from a list/array; if so, reorder the underlying data, not just JSX). `
-    + `After editing, reload the page and call the verify_dom_position tool with the selector and expected spec below — do not consider this move done until it reports pass:true. `
+    + `After editing, call the verify_dom_position tool with the selector and expected spec below — do not consider this move done until it reports pass:true. `
     + `If it reports mismatches, that's a real side effect (e.g. a different wrapper, missing/extra margin, a last-child CSS rule, or a flex-wrap causing an extra row) — find and fix the actual cause, don't add compensating spacing to force a pass.\n\n`
     + `verify_dom_position({ selector: ${JSON.stringify(selector)}, expected: ${JSON.stringify(expected)} })`
     + (parentSizeChanged

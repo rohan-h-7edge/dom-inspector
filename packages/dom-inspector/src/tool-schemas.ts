@@ -157,7 +157,24 @@ Returns: array of element contexts (max 50).`,
         selector: { type: "string", description: "CSS selector for the element, post-edit." },
         expected: {
           type: "object",
-          description: "Spec object copied verbatim from the 'Apply via AI' prompt: index, siblingCount, elementRect{x,y,width,height}, parentRect{width,height}, margin, padding, rectTolerancePx.",
+          description: "Spec object copied verbatim from the 'Apply via AI' prompt: index, siblingCount, elementRect{x,y,width,height}, parentRect{width,height}, margin, padding, style (map of computed style property -> expected value, e.g. flexDirection/justifyContent/alignItems), rectTolerancePx.",
+        },
+      },
+      required: ["selector", "expected"] as string[],
+    },
+  },
+
+  verify_flex_layout: {
+    name: "verify_flex_layout",
+    description: `Diff a live flex/grid container's layout against an expected spec (emitted by the flex feature). Checks the container's own computed style (display/flexDirection/justifyContent/alignItems/alignContent/flexWrap/gap) and, optionally, its children's count and order. Returns { pass, mismatches, actual }. Use this instead of verify_dom_position when the change was to a container's flex layout rather than an element's own box/position.`,
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        selector: { type: "string", description: "CSS selector for the flex/grid container, post-edit." },
+        expected: {
+          type: "object",
+          description:
+            "Spec object copied verbatim from the 'Apply via AI' prompt: style (map of container computed style property -> expected value), childCount (expected number of direct children), childSelectors (expected stable selectors of direct children, in order).",
         },
       },
       required: ["selector", "expected"] as string[],

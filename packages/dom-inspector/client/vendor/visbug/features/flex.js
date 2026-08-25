@@ -1,5 +1,5 @@
 import hotkeys from 'hotkeys-js'
-import { metaKey, getStyle } from '../utilities/'
+import { metaKey, getStyle, describeElement, showApplyViaAiButton, buildStableSelector } from '../utilities/'
 
 const key_events = 'up,down,left,right'
   .split(',')
@@ -18,6 +18,7 @@ export function Flex({selection}) {
 
     let selectedNodes = selection()
       , keys = handler.key.split('+')
+      , before = new Map(selectedNodes.map(el => [el, getFlexProps(el)]))
 
     if (keys.includes('left') || keys.includes('right'))
       keys.includes('shift')
@@ -27,6 +28,8 @@ export function Flex({selection}) {
       keys.includes('shift')
         ? changeVDistribution(selectedNodes, handler.key)
         : changeVAlignment(selectedNodes, handler.key)
+
+    before.forEach((props, el) => announceFlexChange(el, props))
   })
 
   hotkeys(command_events, (e, handler) => {
@@ -34,6 +37,7 @@ export function Flex({selection}) {
 
     let selectedNodes = selection()
       , keys = handler.key.split('+')
+      , before = new Map(selectedNodes.map(el => [el, getFlexProps(el)]))
 
     if (keys.includes('left') || keys.includes('right'))
       keys.includes('shift')
@@ -43,6 +47,8 @@ export function Flex({selection}) {
       keys.includes('shift')
         ? changeWrap(selectedNodes, handler.key)
         : changeDirection(selectedNodes, 'column')
+
+    before.forEach((props, el) => announceFlexChange(el, props))
   })
 
   return () => {
@@ -50,6 +56,65 @@ export function Flex({selection}) {
     hotkeys.unbind(command_events)
     hotkeys.unbind('up,down,left,right')
   }
+}
+
+const getFlexProps = el => ({
+  display:        getStyle(el, 'display'),
+  flexDirection:  getStyle(el, 'flexDirection'),
+  justifyContent: getStyle(el, 'justifyContent'),
+  alignItems:     getStyle(el, 'alignItems'),
+  alignContent:   getStyle(el, 'alignContent'),
+  flexWrap:       getStyle(el, 'flexWrap'),
+  gap:            getStyle(el, 'gap'),
+})
+
+// A short label for a child: its element description plus a trimmed snippet
+// of its own text (not descendants'), so the agent can match it to the right
+// item in source even when several siblings share the same tag/class (e.g.
+// tab labels, list items).
+const describeChild = el => {
+  const ownText = Array.from(el.childNodes)
+    .filter(n => n.nodeType === Node.TEXT_NODE)
+    .map(n => n.textContent.trim())
+    .join(' ')
+    .trim()
+    .slice(0, 40)
+  return ownText ? `${describeElement(el)} "${ownText}"` : describeElement(el)
+}
+
+// After a hotkey-driven flex nudge, offer to carry the same change into the
+// element's source (mirrors margin.js's announceMarginChange). Unlike a
+// margin/padding/position tweak, a flex edit changes a *container's* layout
+// mode, so the prompt also needs to spell out which children are affected —
+// otherwise the agent may reproduce the property change on the wrong element,
+// or miss that reordering children was the actual visible effect.
+const announceFlexChange = (el, before) => {
+  const after = getFlexProps(el)
+  const changedKeys = Object.keys(after).filter(key => before[key] !== after[key])
+  if (!changedKeys.length) return
+
+  const children = Array.from(el.children)
+  const selector = buildStableSelector(el)
+  const childSelectors = children.map(buildStableSelector)
+  const expected = { style: after, childCount: children.length, childSelectors }
+
+  const describeProps = props => changedKeys.map(key => `${key}: ${props[key]}`).join('; ')
+  const describeChildren = () => children.length
+    ? children.map((child, i) => `  ${i}. ${describeChild(child)}`).join('\n')
+    : '  (no direct children)'
+
+  const text = `Update this flex container's layout in the source: ${describeElement(el)}\n\n`
+    + `Changed properties — it was: ${describeProps(before)}\n\n`
+    + `Changed properties — it is now: ${describeProps(after)}\n\n`
+    + `Full current flex properties on this container (for context — not all of these necessarily need to change): ${JSON.stringify(after)}\n\n`
+    + `Direct children of this container, in their current order:\n${describeChildren()}\n\n`
+    + `Find this container's source in the codebase (use the available inspection/context tools if needed) and change its CSS there to match the changed properties above — `
+    + `ONLY change the flex/layout properties listed above. Do not add, remove, or edit any other CSS, className, inline style, or markup on this container or its children as part of this change. `
+    + `If the children list above is in a different order than the source (e.g. this change reordered them), update the source order to match — do not just restyle. `
+    + `After editing, call the verify_flex_layout tool with the selector and expected spec below — do not consider this change done until it reports pass:true.\n\n`
+    + `verify_flex_layout({ selector: ${JSON.stringify(selector)}, expected: ${JSON.stringify(expected)} })`
+
+  showApplyViaAiButton(el, text)
 }
 
 const ensureFlex = el => {

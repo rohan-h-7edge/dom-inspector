@@ -708,6 +708,16 @@ ${a11yTree.length > 0 ? a11yTree.join("\n") : "(empty or no semantic structure)"
       if (expected.padding !== undefined && expected.padding !== padding)
         mismatches.push(`padding: expected "${expected.padding}", got "${padding}"`);
 
+      const styleSnapshot: Record<string, string> = {};
+      if (expected.style) {
+        for (const prop of Object.keys(expected.style)) {
+          const actualValue = style[prop as keyof CSSStyleDeclaration] as unknown as string;
+          styleSnapshot[prop] = actualValue;
+          if (actualValue !== expected.style[prop])
+            mismatches.push(`style.${prop}: expected "${expected.style[prop]}", got "${actualValue}"`);
+        }
+      }
+
       return {
         pass: mismatches.length === 0,
         mismatches,
@@ -718,6 +728,96 @@ ${a11yTree.length > 0 ? a11yTree.join("\n") : "(empty or no semantic structure)"
           parentRect: round(parentRect),
           margin,
           padding,
+          ...(expected.style ? { style: styleSnapshot } : {}),
+        },
+      };
+    }
+
+    // Builds a CSS selector that still resolves to `el` after a page reload,
+    // for diffing a container's children before/after a source edit. Mirrors
+    // vendor/visbug/utilities/apply-via-ai.js's buildStableSelector.
+    function buildSelectorFor(el: Element | null): string | null {
+      if (!el || el.nodeType !== 1) return null;
+      if ((el as HTMLElement).id) return `#${CSS.escape((el as HTMLElement).id)}`;
+      const testId = el.getAttribute("data-testid");
+      if (testId) return `[data-testid="${CSS.escape(testId)}"]`;
+
+      const segments: string[] = [];
+      let node: Element | null = el;
+      while (node && node.nodeType === 1 && node !== document.documentElement) {
+        if ((node as HTMLElement).id) {
+          segments.unshift(`#${CSS.escape((node as HTMLElement).id)}`);
+          break;
+        }
+        const parent = node.parentElement;
+        if (!parent) {
+          segments.unshift(node.nodeName.toLowerCase());
+          break;
+        }
+        const sameTagSiblings = Array.from(parent.children).filter(
+          (c) => c.nodeName === node!.nodeName,
+        );
+        const nthOfType = sameTagSiblings.indexOf(node) + 1;
+        segments.unshift(`${node.nodeName.toLowerCase()}:nth-of-type(${nthOfType})`);
+        node = parent;
+      }
+      return segments.join(" > ");
+    }
+
+    // Deterministically re-measure a flex/grid container and diff it against
+    // an expected layout spec (container style, direct-child count/order) —
+    // the authoritative check for flex-direction/justify/align/wrap/order
+    // edits, which act on a container rather than a single element's own
+    // box/position (verify_dom_position's job).
+    function verifyFlexLayout(args: { selector?: string; expected?: Record<string, any> } = {}) {
+      const { selector, expected = {} } = args;
+
+      if (!selector) return { pass: false, mismatches: ["No selector provided"], actual: null };
+
+      const el = document.querySelector(selector);
+      if (!el) return { pass: false, mismatches: [`No element found for selector: ${selector}`], actual: null };
+
+      const style = getComputedStyle(el);
+      const children = Array.from(el.children);
+      const mismatches: string[] = [];
+
+      const styleSnapshot: Record<string, string> = {};
+      if (expected.style) {
+        for (const prop of Object.keys(expected.style)) {
+          const actualValue = style[prop as keyof CSSStyleDeclaration] as unknown as string;
+          styleSnapshot[prop] = actualValue;
+          if (actualValue !== expected.style[prop])
+            mismatches.push(`style.${prop}: expected "${expected.style[prop]}", got "${actualValue}"`);
+        }
+      }
+
+      if (expected.childCount !== undefined && children.length !== expected.childCount)
+        mismatches.push(`childCount: expected ${expected.childCount}, got ${children.length}`);
+
+      const childSelectors = children.map((child) => buildSelectorFor(child));
+      if (expected.childSelectors) {
+        const expectedList: string[] = expected.childSelectors;
+        if (expectedList.length !== childSelectors.length) {
+          mismatches.push(
+            `childSelectors count: expected ${expectedList.length}, got ${childSelectors.length}`,
+          );
+        } else {
+          expectedList.forEach((expectedSel, i) => {
+            if (expectedSel !== childSelectors[i])
+              mismatches.push(
+                `child #${i}: expected "${expectedSel}", got "${childSelectors[i]}"`,
+              );
+          });
+        }
+      }
+
+      return {
+        pass: mismatches.length === 0,
+        mismatches,
+        actual: {
+          childCount: children.length,
+          childSelectors,
+          ...(expected.style ? { style: styleSnapshot } : {}),
         },
       };
     }
@@ -779,6 +879,13 @@ ${a11yTree.length > 0 ? a11yTree.join("\n") : "(empty or no semantic structure)"
         implementation: wrapToolImplementation(
           TOOL_SCHEMAS.verify_dom_position.name,
           verifyDomPosition as unknown as (args: Record<string, unknown> | undefined) => unknown,
+        ),
+      },
+      {
+        ...TOOL_SCHEMAS.verify_flex_layout,
+        implementation: wrapToolImplementation(
+          TOOL_SCHEMAS.verify_flex_layout.name,
+          verifyFlexLayout as unknown as (args: Record<string, unknown> | undefined) => unknown,
         ),
       },
     ];

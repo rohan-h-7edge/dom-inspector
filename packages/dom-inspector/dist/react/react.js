@@ -2,9 +2,6 @@ import { Client } from "@modelcontextprotocol/sdk/client";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClientExecClient } from "@mcpc-tech/cmcp";
-import "blingblingjs";
-import Color from "colorjs.io";
-import { isReadable } from "@ctrl/tinycolor";
 import { ListPromptsResultSchema, PromptListChangedNotificationSchema } from "@modelcontextprotocol/sdk/types.js";
 
 //#region src/tool-schemas.ts
@@ -142,7 +139,7 @@ Returns: array of element contexts (max 50).`,
 	},
 	verify_dom_position: {
 		name: "verify_dom_position",
-		description: `Diff a live element's position/box against an expected spec (emitted by the move/position features). Returns { pass, mismatches, actual }. Authoritative check — use instead of eyeballing rects.`,
+		description: `Diff a live element's position/box against an expected spec (emitted by the move/position/margin/padding features). Returns { pass, mismatches, actual }. Authoritative check — use instead of eyeballing rects.`,
 		inputSchema: {
 			type: "object",
 			properties: {
@@ -152,7 +149,25 @@ Returns: array of element contexts (max 50).`,
 				},
 				expected: {
 					type: "object",
-					description: "Spec object copied verbatim from the 'Apply via AI' prompt: index, siblingCount, elementRect{x,y,width,height}, parentRect{width,height}, margin, rectTolerancePx."
+					description: "Spec object copied verbatim from the 'Apply via AI' prompt: index, siblingCount, elementRect{x,y,width,height}, parentRect{width,height}, margin, padding, style (map of computed style property -> expected value, e.g. flexDirection/justifyContent/alignItems), rectTolerancePx."
+				}
+			},
+			required: ["selector", "expected"]
+		}
+	},
+	verify_flex_layout: {
+		name: "verify_flex_layout",
+		description: `Diff a live flex/grid container's layout against an expected spec (emitted by the flex feature). Checks the container's own computed style (display/flexDirection/justifyContent/alignItems/alignContent/flexWrap/gap) and, optionally, its children's count and order. Returns { pass, mismatches, actual }. Use this instead of verify_dom_position when the change was to a container's flex layout rather than an element's own box/position.`,
+		inputSchema: {
+			type: "object",
+			properties: {
+				selector: {
+					type: "string",
+					description: "CSS selector for the flex/grid container, post-edit."
+				},
+				expected: {
+					type: "object",
+					description: "Spec object copied verbatim from the 'Apply via AI' prompt: style (map of container computed style property -> expected value), childCount (expected number of direct children), childSelectors (expected stable selectors of direct children, in order)."
 				}
 			},
 			required: ["selector", "expected"]
@@ -164,32 +179,6 @@ Returns: array of element contexts (max 50).`,
 		inputSchema: {
 			type: "object",
 			properties: {}
-		}
-	},
-	a11y_audit: {
-		name: "a11y_audit",
-		description: `Audit accessibility of the live page (or a subtree). Walks visible elements and reports concrete violations, not just present attributes:
-- img-alt: <img> missing alt
-- accessible-name: interactive element with no accessible name (text, aria-label, aria-labelledby, or <label>)
-- color-contrast: text failing WCAG2.1 AA contrast
-- duplicate-id: repeated id attribute
-- tabindex-order / tabindex-removed: positive tabindex, or negative tabindex on an interactive element
-- aria-hidden-focusable: aria-hidden="true" on a still-focusable element
-- heading-order: skipped heading level (e.g. h1 -> h3)
-
-Returns { totalViolations, bySeverity, violations: [{ rule, severity, selector, message, details? }] }.`,
-		inputSchema: {
-			type: "object",
-			properties: {
-				selector: {
-					type: "string",
-					description: "CSS selector to scope the audit to a subtree. Defaults to document.body (whole page)."
-				},
-				includeContrast: {
-					type: "boolean",
-					description: "Whether to run color-contrast checks (more expensive). Defaults to true."
-				}
-			}
 		}
 	}
 };
@@ -694,431 +683,6 @@ function formatCopyContext(options) {
 }
 
 //#endregion
-//#region client/vendor/visbug/utilities/strings.js
-const metaKey = window.navigator.platform.includes("Mac") ? "cmd" : "ctrl";
-const altKey = window.navigator.platform.includes("Mac") ? "opt" : "alt";
-
-//#endregion
-//#region client/vendor/visbug/utilities/common.js
-const isInsideDomInspectorHost = (node) => {
-	let root = node.getRootNode && node.getRootNode();
-	while (root && root.host) {
-		if (root.host.tagName === "DOM-INSPECTOR-MCP") return true;
-		root = root.host.getRootNode();
-	}
-	return false;
-};
-const isOffBounds = (node) => node.closest && (isInsideDomInspectorHost(node) || node.closest("vis-bug") || node.closest("hotkey-map") || node.closest("visbug-metatip") || node.closest("visbug-ally") || node.closest("visbug-label") || node.closest("visbug-handles") || node.closest("visbug-corners") || node.closest("visbug-grip") || node.closest("visbug-gridlines"));
-const isSelectorValid = ((qs) => ((selector) => {
-	try {
-		qs(selector);
-	} catch (e) {
-		return false;
-	}
-	return true;
-}))((s) => document.createDocumentFragment().querySelector(s));
-
-//#endregion
-//#region client/vendor/visbug/utilities/cross-browser.js
-const isFirefox = navigator.userAgent.search("Firefox") > 0;
-const isSafarish = navigator.userAgent.search("Safari") > 0;
-const isChrome = navigator.userAgent.search("Chrome") > 0;
-const isSafari = isSafarish && !isChrome;
-const testConstructible = () => {
-	try {
-		new window.CSSStyleSheet("a{}");
-		return true;
-	} catch (e) {
-		return false;
-	}
-};
-const constructibleStylesheetSupport = testConstructible();
-
-//#endregion
-//#region client/vendor/visbug/utilities/design-properties.js
-const desiredPropMap = {
-	color: "rgb(0, 0, 0)",
-	backgroundColor: "rgba(0, 0, 0, 0)",
-	backgroundImage: "none",
-	backgroundSize: "auto",
-	backgroundPosition: "0% 0%",
-	borderRadius: "0px",
-	boxShadow: "none",
-	padding: "0px",
-	margin: "0px",
-	fontFamily: "auto",
-	fontSize: "16px",
-	fontWeight: "400",
-	textAlign: "start",
-	textShadow: "none",
-	textTransform: "none",
-	lineHeight: "normal",
-	letterSpacing: "normal",
-	display: "block",
-	alignItems: "normal",
-	justifyContent: "normal",
-	flexDirection: "row",
-	flexWrap: "nowrap",
-	flexBasis: "auto",
-	fill: "rgb(0, 0, 0)",
-	stroke: "none",
-	gridTemplateColumns: "none",
-	gridAutoColumns: "auto",
-	gridTemplateRows: "none",
-	gridAutoRows: "auto",
-	gridTemplateAreas: "none",
-	gridArea: "auto",
-	gap: "normal",
-	gridAutoFlow: "row"
-};
-if (isFirefox) {
-	desiredPropMap.backgroundSize = "auto";
-	desiredPropMap.borderWidth = "";
-	desiredPropMap.borderRadius = "";
-	desiredPropMap.padding = "";
-	desiredPropMap.margin = "";
-	desiredPropMap.gap = "";
-	desiredPropMap.gridArea = "";
-	desiredPropMap.borderColor = "";
-}
-if (isSafari) desiredPropMap.gap = "normal normal";
-const largeWCAG2TextMap = [{
-	fontSize: "24px",
-	fontWeight: "0"
-}, {
-	fontSize: "18.5px",
-	fontWeight: "700"
-}];
-
-//#endregion
-//#region client/vendor/visbug/utilities/styles.js
-const getStyle = (el, name) => {
-	if (document.defaultView && document.defaultView.getComputedStyle) {
-		name = name.replace(/([A-Z])/g, "-$1");
-		name = name.toLowerCase();
-		let s = document.defaultView.getComputedStyle(el, "");
-		return s && s.getPropertyValue(name);
-	}
-};
-const getStyles = (el) => {
-	el.style;
-	const computedStyle = window.getComputedStyle(el, null);
-	const vettedStyles = [];
-	const borders = [];
-	for (const prop in el.style) {
-		const is_desired = desiredPropMap[prop];
-		if (is_desired && is_desired != computedStyle[prop]) vettedStyles.push({
-			prop,
-			value: computedStyle[prop]
-		});
-		if (prop === "borderColor" || prop === "borderWidth" || prop === "borderStyle") borders[prop] = computedStyle[prop].replace(/, rgba/g, "\rrgba");
-	}
-	const { borderColor, borderWidth, borderStyle } = borders;
-	if (parseFloat(borderWidth) > 0) {
-		vettedStyles.push({
-			prop: "borderColor",
-			value: borderColor
-		});
-		vettedStyles.push({
-			prop: "borderStyle",
-			value: borderStyle
-		});
-		vettedStyles.push({
-			prop: "borderWidth",
-			value: borderWidth
-		});
-	}
-	return vettedStyles.sort(function({ prop: propA }, { prop: propB }) {
-		if (propA < propB) return -1;
-		if (propA > propB) return 1;
-		return 0;
-	});
-};
-let canvas_color;
-const getComputedCanvasBackgroundColor = () => {
-	if (canvas_color) return canvas_color;
-	const foo = document.createElement("span");
-	foo.style.backgroundColor = "Canvas";
-	document.body.appendChild(foo);
-	canvas_color = getComputedStyle(foo).backgroundColor;
-	document.body.removeChild(foo);
-	return canvas_color;
-};
-const getComputedBackgroundColor = (el) => {
-	let background = getStyle(el, "background-color");
-	if (background === "rgba(0, 0, 0, 0)") {
-		let node = findNearestParentElement(el), found = false;
-		while (!found) {
-			let bg = getStyle(node, "background-color");
-			if (node.nodeName === "HTML") {
-				found = true;
-				background = getComputedCanvasBackgroundColor();
-			}
-			if (bg !== "rgba(0, 0, 0, 0)") {
-				found = true;
-				background = bg;
-			}
-			node = findNearestParentElement(node);
-		}
-	}
-	return background;
-};
-const findNearestParentElement = (el) => {
-	if (el.nodeName === "HTML") return el;
-	return el.parentNode && el.parentNode.nodeType === 1 ? el.parentNode : el.parentNode.nodeName === "#document-fragment" ? el.parentNode.host : el.parentNode.parentNode.host;
-};
-
-//#endregion
-//#region client/vendor/visbug/utilities/accessibility.js
-const getWCAG2TextSize = (el) => {
-	const { fontSize = desiredPropMap.fontSize, fontWeight = desiredPropMap.fontWeight } = getStyles(el).reduce((styleMap, style) => {
-		styleMap[style.prop] = style.value;
-		return styleMap;
-	}, {});
-	return largeWCAG2TextMap.some((largeProperties) => parseFloat(fontSize) >= parseFloat(largeProperties.fontSize) && parseFloat(fontWeight) >= parseFloat(largeProperties.fontWeight)) ? "Large" : "Small";
-};
-const computeContrast = (el) => {
-	const foreground = el instanceof SVGElement ? getStyle(el, "fill") || getStyle(el, "stroke") : getStyle(el, "color");
-	const background = getComputedBackgroundColor(el);
-	if (foreground === background) return null;
-	const ts = getWCAG2TextSize(el);
-	const tspx = window.getComputedStyle(el, null).getPropertyValue("font-size");
-	const textSize = ts === "Small" ? "AA" : "AA+";
-	const fg = new Color(foreground);
-	const bg = new Color(background);
-	const aa_pass = isReadable(bg.to("srgb").toString({ format: "hex" }), fg.to("srgb").toString({ format: "hex" }), {
-		level: "AA",
-		size: ts.toLowerCase()
-	});
-	const aaa_pass = isReadable(bg.to("srgb").toString({ format: "hex" }), fg.to("srgb").toString({ format: "hex" }), {
-		level: "AAA",
-		size: ts.toLowerCase()
-	});
-	const apca_contrast = parseFloat(bg.contrast(fg, "APCA").toFixed(1));
-	const abs_apca = Math.abs(apca_contrast);
-	let apca_pass = false;
-	if (parseInt(tspx) <= 24 && abs_apca >= 75) apca_pass = true;
-	else if (parseInt(tspx) >= 24 && abs_apca >= 60) apca_pass = true;
-	else if (parseInt(tspx) >= 36 && abs_apca >= 45) apca_pass = true;
-	return {
-		foreground,
-		background,
-		textSize,
-		aa_pass,
-		aaa_pass,
-		wcag21_ratio: parseFloat(bg.contrast(fg, "wcag21").toFixed(1)),
-		apca_contrast,
-		apca_pass,
-		lstar: parseFloat(bg.contrast(fg, "Lstar").toFixed(0))
-	};
-};
-
-//#endregion
-//#region client/vendor/visbug/utilities/a11y-audit.js
-const NAME_REQUIRED_TAGS = new Set([
-	"A",
-	"BUTTON",
-	"INPUT",
-	"SELECT",
-	"TEXTAREA"
-]);
-const HEADING_TAGS = [
-	"H1",
-	"H2",
-	"H3",
-	"H4",
-	"H5",
-	"H6"
-];
-const cssPath = (el) => {
-	const parts = [];
-	let node = el;
-	while (node && node.nodeType === 1 && parts.length < 6) {
-		let part = node.tagName.toLowerCase();
-		if (node.id) {
-			part += `#${node.id}`;
-			parts.unshift(part);
-			break;
-		}
-		const parent = node.parentElement;
-		if (parent) {
-			const siblingsOfType = Array.from(parent.children).filter((c) => c.tagName === node.tagName);
-			if (siblingsOfType.length > 1) part += `:nth-of-type(${siblingsOfType.indexOf(node) + 1})`;
-		}
-		parts.unshift(part);
-		node = parent;
-	}
-	return parts.join(" > ");
-};
-const accessibleName = (el) => {
-	const ariaLabel = el.getAttribute("aria-label");
-	if (ariaLabel && ariaLabel.trim()) return ariaLabel.trim();
-	const labelledBy = el.getAttribute("aria-labelledby");
-	if (labelledBy) {
-		const text$1 = labelledBy.split(/\s+/).map((id) => document.getElementById(id)?.textContent?.trim()).filter(Boolean).join(" ");
-		if (text$1) return text$1;
-	}
-	if (el.tagName === "INPUT") {
-		const type = (el.getAttribute("type") || "text").toLowerCase();
-		if ([
-			"button",
-			"submit",
-			"reset"
-		].includes(type) && el.value?.trim()) return el.value.trim();
-		if (el.placeholder?.trim()) return el.placeholder.trim();
-		const id = el.id;
-		if (id) {
-			const label = document.querySelector(`label[for="${id}"]`);
-			if (label?.textContent?.trim()) return label.textContent.trim();
-		}
-		if (el.closest("label")?.textContent?.trim()) return el.closest("label").textContent.trim();
-		return null;
-	}
-	if (el.tagName === "SELECT" || el.tagName === "TEXTAREA") {
-		const id = el.id;
-		if (id) {
-			const label = document.querySelector(`label[for="${id}"]`);
-			if (label?.textContent?.trim()) return label.textContent.trim();
-		}
-		if (el.closest("label")?.textContent?.trim()) return el.closest("label").textContent.trim();
-		return null;
-	}
-	const title = el.getAttribute("title");
-	const text = el.textContent?.trim();
-	if (text) return text;
-	if (title?.trim()) return title.trim();
-	const img = el.querySelector?.("img[alt]");
-	if (img) return img.getAttribute("alt")?.trim() || null;
-	return null;
-};
-const hasVisibleText = (el) => {
-	if (el.children.length > 0) return false;
-	return !!el.textContent?.trim();
-};
-const isVisible = (el) => {
-	if (isOffBounds(el)) return false;
-	const style = window.getComputedStyle(el);
-	if (style.display === "none" || style.visibility === "hidden" || parseFloat(style.opacity) === 0) return false;
-	const rect = el.getBoundingClientRect();
-	return rect.width > 0 && rect.height > 0;
-};
-/**
-* Walk the DOM under `root` and report concrete accessibility violations as
-* structured data — the a11y_audit MCP tool's implementation. Distinct from
-* getA11ys() (which just lists whatever a11y attributes an element already
-* has, for the hover tooltip) in that this flags what's *missing* or *wrong*.
-*/
-function auditAccessibility({ root = document.body, includeContrast = true, maxContrastNodes = 300 } = {}) {
-	const violations = [];
-	const seenIds = /* @__PURE__ */ new Map();
-	let lastHeadingLevel = 0;
-	let contrastChecked = 0;
-	const walk = (el) => {
-		if (el.nodeType !== 1) return;
-		if ([
-			"SCRIPT",
-			"STYLE",
-			"NOSCRIPT",
-			"TEMPLATE"
-		].includes(el.tagName)) return;
-		const visible = isVisible(el);
-		if (el.id) if (seenIds.has(el.id)) violations.push({
-			rule: "duplicate-id",
-			severity: "serious",
-			selector: cssPath(el),
-			message: `Duplicate id "${el.id}" (also used by ${seenIds.get(el.id)})`
-		});
-		else seenIds.set(el.id, cssPath(el));
-		if (visible) {
-			if (el.tagName === "IMG" && !el.hasAttribute("alt")) violations.push({
-				rule: "img-alt",
-				severity: "critical",
-				selector: cssPath(el),
-				message: `<img> has no alt attribute (src: ${el.getAttribute("src")?.slice(0, 80) || "(none)"})`
-			});
-			const role = el.getAttribute("role");
-			if (NAME_REQUIRED_TAGS.has(el.tagName) || [
-				"button",
-				"link",
-				"checkbox",
-				"radio",
-				"switch",
-				"menuitem",
-				"tab"
-			].includes(role)) {
-				if (!((el.tagName === "INPUT" ? (el.getAttribute("type") || "text").toLowerCase() : null) === "hidden") && !accessibleName(el)) violations.push({
-					rule: "accessible-name",
-					severity: "critical",
-					selector: cssPath(el),
-					message: `<${el.tagName.toLowerCase()}${role ? ` role="${role}"` : ""}> has no accessible name (no text, aria-label, aria-labelledby, or associated <label>)`
-				});
-			}
-			const tabindex = el.getAttribute("tabindex");
-			if (tabindex !== null) {
-				const n = parseInt(tabindex, 10);
-				if (n > 0) violations.push({
-					rule: "tabindex-order",
-					severity: "moderate",
-					selector: cssPath(el),
-					message: `tabindex="${n}" overrides natural tab order — use 0 or remove it instead`
-				});
-				else if (n < 0 && (NAME_REQUIRED_TAGS.has(el.tagName) || role)) violations.push({
-					rule: "tabindex-removed",
-					severity: "moderate",
-					selector: cssPath(el),
-					message: `Interactive element has tabindex="${n}", removing it from keyboard tab order`
-				});
-			}
-			if (el.getAttribute("aria-hidden") === "true" && (NAME_REQUIRED_TAGS.has(el.tagName) || tabindex !== null && parseInt(tabindex, 10) >= 0)) violations.push({
-				rule: "aria-hidden-focusable",
-				severity: "serious",
-				selector: cssPath(el),
-				message: `aria-hidden="true" on a focusable element — it stays reachable by keyboard while hidden from screen readers`
-			});
-			if (HEADING_TAGS.includes(el.tagName)) {
-				const level = parseInt(el.tagName[1], 10);
-				if (lastHeadingLevel > 0 && level > lastHeadingLevel + 1) violations.push({
-					rule: "heading-order",
-					severity: "moderate",
-					selector: cssPath(el),
-					message: `Heading level jumps from h${lastHeadingLevel} to h${level} — skips h${lastHeadingLevel + 1}`
-				});
-				lastHeadingLevel = level;
-			}
-			if (includeContrast && contrastChecked < maxContrastNodes && hasVisibleText(el)) {
-				contrastChecked++;
-				const c = computeContrast(el);
-				if (c && !c.aa_pass) violations.push({
-					rule: "color-contrast",
-					severity: "serious",
-					selector: cssPath(el),
-					message: `Text contrast ${c.wcag21_ratio}:1 fails WCAG2.1 ${c.textSize} (needs ${c.textSize === "AA" ? "4.5" : "3"}:1) — foreground ${c.foreground} on background ${c.background}`,
-					details: c
-				});
-			}
-		}
-		for (const child of el.children) walk(child);
-	};
-	walk(root);
-	const bySeverity = {
-		critical: 0,
-		serious: 0,
-		moderate: 0,
-		minor: 0
-	};
-	violations.forEach((v) => bySeverity[v.severity] = (bySeverity[v.severity] || 0) + 1);
-	return {
-		url: window.location.href,
-		root: root === document.body ? "body" : cssPath(root),
-		checkedContrastNodes: contrastChecked,
-		contrastTruncated: includeContrast && contrastChecked >= maxContrastNodes,
-		totalViolations: violations.length,
-		bySeverity,
-		violations
-	};
-}
-
-//#endregion
 //#region client/hooks/useMcp.ts
 const STORAGE_KEY = "inspector-inspection-items";
 const INSPECTION_ID_KEY = "inspector-current-inspection-id";
@@ -1544,6 +1108,7 @@ ${a11yTree.length > 0 ? a11yTree.join("\n") : "(empty or no semantic structure)"
 			const parentRect = parent.getBoundingClientRect();
 			const style = getComputedStyle(el);
 			const margin = `${style.marginTop} ${style.marginRight} ${style.marginBottom} ${style.marginLeft}`;
+			const padding = `${style.paddingTop} ${style.paddingRight} ${style.paddingBottom} ${style.paddingLeft}`;
 			const round = (r) => ({
 				x: Math.round(r.x),
 				y: Math.round(r.y),
@@ -1570,6 +1135,13 @@ ${a11yTree.length > 0 ? a11yTree.join("\n") : "(empty or no semantic structure)"
 				if (diff > tolerance) mismatches.push(`parent ${key}: expected ${Math.round(expected.parentRect[key])}px, got ${Math.round(parentRect[key])}px (diff ${Math.round(diff)}px)`);
 			}
 			if (expected.margin !== void 0 && expected.margin !== margin) mismatches.push(`margin: expected "${expected.margin}", got "${margin}"`);
+			if (expected.padding !== void 0 && expected.padding !== padding) mismatches.push(`padding: expected "${expected.padding}", got "${padding}"`);
+			const styleSnapshot = {};
+			if (expected.style) for (const prop of Object.keys(expected.style)) {
+				const actualValue = style[prop];
+				styleSnapshot[prop] = actualValue;
+				if (actualValue !== expected.style[prop]) mismatches.push(`style.${prop}: expected "${expected.style[prop]}", got "${actualValue}"`);
+			}
 			return {
 				pass: mismatches.length === 0,
 				mismatches,
@@ -1578,22 +1150,75 @@ ${a11yTree.length > 0 ? a11yTree.join("\n") : "(empty or no semantic structure)"
 					siblingCount: siblings.length,
 					rect: round(rect),
 					parentRect: round(parentRect),
-					margin
+					margin,
+					padding,
+					...expected.style ? { style: styleSnapshot } : {}
 				}
 			};
 		}
-		function runA11yAudit(args = {}) {
-			const { selector, includeContrast = true } = args;
-			let root = document.body;
-			if (selector) {
-				const found = document.querySelector(selector);
-				if (!found) return { error: `No element found for selector: ${selector}` };
-				root = found;
+		function buildSelectorFor(el) {
+			if (!el || el.nodeType !== 1) return null;
+			if (el.id) return `#${CSS.escape(el.id)}`;
+			const testId = el.getAttribute("data-testid");
+			if (testId) return `[data-testid="${CSS.escape(testId)}"]`;
+			const segments = [];
+			let node = el;
+			while (node && node.nodeType === 1 && node !== document.documentElement) {
+				if (node.id) {
+					segments.unshift(`#${CSS.escape(node.id)}`);
+					break;
+				}
+				const parent = node.parentElement;
+				if (!parent) {
+					segments.unshift(node.nodeName.toLowerCase());
+					break;
+				}
+				const nthOfType = Array.from(parent.children).filter((c) => c.nodeName === node.nodeName).indexOf(node) + 1;
+				segments.unshift(`${node.nodeName.toLowerCase()}:nth-of-type(${nthOfType})`);
+				node = parent;
 			}
-			return auditAccessibility({
-				root,
-				includeContrast
-			});
+			return segments.join(" > ");
+		}
+		function verifyFlexLayout(args = {}) {
+			const { selector, expected = {} } = args;
+			if (!selector) return {
+				pass: false,
+				mismatches: ["No selector provided"],
+				actual: null
+			};
+			const el = document.querySelector(selector);
+			if (!el) return {
+				pass: false,
+				mismatches: [`No element found for selector: ${selector}`],
+				actual: null
+			};
+			const style = getComputedStyle(el);
+			const children = Array.from(el.children);
+			const mismatches = [];
+			const styleSnapshot = {};
+			if (expected.style) for (const prop of Object.keys(expected.style)) {
+				const actualValue = style[prop];
+				styleSnapshot[prop] = actualValue;
+				if (actualValue !== expected.style[prop]) mismatches.push(`style.${prop}: expected "${expected.style[prop]}", got "${actualValue}"`);
+			}
+			if (expected.childCount !== void 0 && children.length !== expected.childCount) mismatches.push(`childCount: expected ${expected.childCount}, got ${children.length}`);
+			const childSelectors = children.map((child) => buildSelectorFor(child));
+			if (expected.childSelectors) {
+				const expectedList = expected.childSelectors;
+				if (expectedList.length !== childSelectors.length) mismatches.push(`childSelectors count: expected ${expectedList.length}, got ${childSelectors.length}`);
+				else expectedList.forEach((expectedSel, i) => {
+					if (expectedSel !== childSelectors[i]) mismatches.push(`child #${i}: expected "${expectedSel}", got "${childSelectors[i]}"`);
+				});
+			}
+			return {
+				pass: mismatches.length === 0,
+				mismatches,
+				actual: {
+					childCount: children.length,
+					childSelectors,
+					...expected.style ? { style: styleSnapshot } : {}
+				}
+			};
 		}
 		eventHandlers.forEach(({ event, handler }) => {
 			window.addEventListener(event, handler);
@@ -1628,8 +1253,8 @@ ${a11yTree.length > 0 ? a11yTree.join("\n") : "(empty or no semantic structure)"
 				implementation: wrapToolImplementation(TOOL_SCHEMAS.verify_dom_position.name, verifyDomPosition)
 			},
 			{
-				...TOOL_SCHEMAS.a11y_audit,
-				implementation: wrapToolImplementation(TOOL_SCHEMAS.a11y_audit.name, runA11yAudit)
+				...TOOL_SCHEMAS.verify_flex_layout,
+				implementation: wrapToolImplementation(TOOL_SCHEMAS.verify_flex_layout.name, verifyFlexLayout)
 			}
 		];
 		const getCustomTools = () => {

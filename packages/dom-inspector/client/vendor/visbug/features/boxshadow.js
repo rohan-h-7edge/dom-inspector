@@ -1,5 +1,5 @@
 import hotkeys from 'hotkeys-js'
-import { metaKey, getStyle, showHideSelected } from '../utilities/'
+import { metaKey, getStyle, showHideSelected, describeElement, showApplyViaAiButton, buildStableSelector } from '../utilities/'
 
 const key_events = 'up,down,left,right'
   .split(',')
@@ -18,6 +18,7 @@ export function BoxShadow({selection}) {
 
     let selectedNodes = selection()
       , keys = handler.key.split('+')
+      , before = new Map(selectedNodes.map(el => [el, getStyle(el, 'boxShadow')]))
 
     if (keys.includes('left') || keys.includes('right'))
       keys.includes('alt')
@@ -27,14 +28,21 @@ export function BoxShadow({selection}) {
       keys.includes('alt')
         ? changeBoxShadow(selectedNodes, keys, 'blur')
         : changeBoxShadow(selectedNodes, keys, 'y')
+
+    before.forEach((shadow, el) => announceBoxShadowChange(el, shadow))
   })
 
   hotkeys(command_events, (e, handler) => {
     e.preventDefault()
-    let keys = handler.key.split('+')
+    let selectedNodes = selection()
+      , keys = handler.key.split('+')
+      , before = new Map(selectedNodes.map(el => [el, getStyle(el, 'boxShadow')]))
+
     keys.includes('left') || keys.includes('right')
-      ? changeBoxShadow(selection(), keys, 'opacity')
-      : changeBoxShadow(selection(), keys, 'inset')
+      ? changeBoxShadow(selectedNodes, keys, 'opacity')
+      : changeBoxShadow(selectedNodes, keys, 'inset')
+
+    before.forEach((shadow, el) => announceBoxShadowChange(el, shadow))
   })
 
   return () => {
@@ -42,6 +50,26 @@ export function BoxShadow({selection}) {
     hotkeys.unbind(command_events)
     hotkeys.unbind('up,down,left,right')
   }
+}
+
+// After a hotkey-driven box-shadow nudge, offer to carry the same change
+// into the element's source (mirrors margin.js's announceMarginChange).
+const announceBoxShadowChange = (el, before) => {
+  const after = getStyle(el, 'boxShadow')
+  if (before === after) return
+
+  const selector = buildStableSelector(el)
+  const expected = { style: { boxShadow: after } }
+
+  const text = `Update this element's box-shadow in the source: ${describeElement(el)}\n\n`
+    + `It was: box-shadow: ${before}\n\n`
+    + `It is now: box-shadow: ${after}\n\n`
+    + `Find this element's source in the codebase (use the available inspection/context tools if needed) and change its box-shadow there to match — `
+    + `ONLY change the box-shadow. Do not add, remove, or edit any other CSS, className, inline style, or markup on this element as part of this change. `
+    + `After editing, call the verify_dom_position tool with the selector and expected spec below — do not consider this change done until it reports pass:true.\n\n`
+    + `verify_dom_position({ selector: ${JSON.stringify(selector)}, expected: ${JSON.stringify(expected)} })`
+
+  showApplyViaAiButton(el, text)
 }
 
 const ensureHasShadow = el => {

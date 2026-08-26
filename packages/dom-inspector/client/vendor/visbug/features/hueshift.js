@@ -2,7 +2,7 @@ import $ from 'blingblingjs'
 import hotkeys from 'hotkeys-js'
 import { TinyColor } from '@ctrl/tinycolor'
 
-import { metaKey, getStyle, showHideSelected } from '../utilities/'
+import { metaKey, getStyle, showHideSelected, describeElement, showApplyViaAiButton, buildStableSelector } from '../utilities/'
 
 const key_events = 'up,down,left,right'
   .split(',')
@@ -34,18 +34,25 @@ export function HueShift({Color:ColorTool, Visbug}) {
 
     let selectedNodes = state.elements
       , keys = handler.key.split('+')
+      , before = new Map(selectedNodes.map(el => [el, getColorProps(el)]))
 
     keys.includes('left') || keys.includes('right')
       ? changeHue(selectedNodes, keys, 's', ColorTool)
       : changeHue(selectedNodes, keys, 'l', ColorTool)
+
+    before.forEach((props, el) => announceHueChange(el, props))
   })
 
   hotkeys(command_events, (e, handler) => {
     e.preventDefault()
     let keys = handler.key.split('+')
+      , before = new Map(state.elements.map(el => [el, getColorProps(el)]))
+
     keys.includes('left') || keys.includes('right')
       ? changeHue(state.elements, keys, 'a', ColorTool)
       : changeHue(state.elements, keys, 'h', ColorTool)
+
+    before.forEach((props, el) => announceHueChange(el, props))
   })
 
   hotkeys(']', (e, handler) => {
@@ -75,6 +82,39 @@ export function HueShift({Color:ColorTool, Visbug}) {
     hotkeys.unbind(command_events)
     hotkeys.unbind('up,down,left,right')
   }
+}
+
+// Snapshot of every color-bearing style this feature can touch (not just
+// the currently-active one), so a before/after diff can tell which of them
+// actually changed regardless of which color slot (foreground/background/
+// border) was active when the hotkey fired.
+const getColorProps = el => el instanceof SVGElement
+  ? { stroke: getStyle(el, 'stroke'), fill: getStyle(el, 'fill'), outline: getStyle(el, 'outline') }
+  : { color: getStyle(el, 'color'), backgroundColor: getStyle(el, 'backgroundColor'), borderColor: getStyle(el, 'borderColor') }
+
+// After a hotkey-driven hue/saturation/lightness/alpha nudge, offer to
+// carry the same change into the element's source (mirrors margin.js's
+// announceMarginChange).
+const announceHueChange = (el, before) => {
+  const after = getColorProps(el)
+  const changedKeys = Object.keys(after).filter(key => before[key] !== after[key])
+  if (!changedKeys.length) return
+
+  const selector = buildStableSelector(el)
+  const style = changedKeys.reduce((acc, key) => Object.assign(acc, {[key]: after[key]}), {})
+  const expected = { style }
+
+  const describeProps = props => changedKeys.map(key => `${key}: ${props[key]}`).join('; ')
+
+  const text = `Update this element's color in the source: ${describeElement(el)}\n\n`
+    + `It was: ${describeProps(before)}\n\n`
+    + `It is now: ${describeProps(after)}\n\n`
+    + `Find this element's source in the codebase (use the available inspection/context tools if needed) and change its CSS there to match — `
+    + `ONLY change the color properties listed above. Do not add, remove, or edit any other CSS, className, inline style, or markup on this element as part of this change. `
+    + `After editing, call the verify_dom_position tool with the selector and expected spec below — do not consider this change done until it reports pass:true.\n\n`
+    + `verify_dom_position({ selector: ${JSON.stringify(selector)}, expected: ${JSON.stringify(expected)} })`
+
+  showApplyViaAiButton(el, text)
 }
 
 export function changeHue(els, direction, prop, ColorTool) {

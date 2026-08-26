@@ -12,12 +12,14 @@ import {
   Info,
   Pin,
   Check,
+  ImagePlus,
 } from "lucide-react";
 import { Shimmer } from "../../src/components/ai-elements/shimmer";
 import { GetPromptResultSchema } from "@modelcontextprotocol/sdk/types.js";
 import type { UIMessage } from "ai";
 import { type InspectionItem } from "./InspectionQueue";
 import { ContextDialog } from "./ContextDialog";
+import { DesignDialog } from "./DesignDialog";
 import type { McpClientType } from "../hooks/useMcp";
 import { MessageDetail } from "./MessageDetail";
 import { useIslandState } from "../hooks/useIslandState";
@@ -80,6 +82,7 @@ export const InspectorBar = ({
   const [isAgentSelectorOpen, setIsAgentSelectorOpen] = useState(false);
   const [configInfoAgent, setConfigInfoAgent] = useState<string | null>(null);
   const [showContextDialog, setShowContextDialog] = useState(false);
+  const [showDesignDialog, setShowDesignDialog] = useState(false);
 
   const { prompts } = usePrompts(mcpClient || null);
 
@@ -646,6 +649,18 @@ export const InspectorBar = ({
                   </span>
                 )}
               </button>
+              <button
+                type="button"
+                onClick={() => setShowDesignDialog(true)}
+                className={cn(
+                  "relative flex items-center justify-center w-7 h-7 rounded-full transition-colors flex-shrink-0",
+                  "hover:bg-accent/50",
+                  showDesignDialog && "bg-accent/50 text-foreground",
+                )}
+                title="Design a new screen from an image"
+              >
+                <ImagePlus className="w-3.5 h-3.5" />
+              </button>
               <div className="w-px h-4 bg-border flex-shrink-0" />
             </>
 
@@ -858,6 +873,16 @@ export const InspectorBar = ({
         onRemoveInspection={onRemoveInspection}
         client={mcpClient}
         isClientReady={toolsReady}
+      />
+
+      {/* Design Dialog */}
+      <DesignDialog
+        open={showDesignDialog}
+        onOpenChange={setShowDesignDialog}
+        onSubmitAgent={(text) => {
+          submitToAgent(text);
+          setActivePanel("chat");
+        }}
       />
 
       {/* Config Info Modal - using Dialog component */}

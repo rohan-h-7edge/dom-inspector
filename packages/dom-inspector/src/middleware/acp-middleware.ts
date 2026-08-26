@@ -155,6 +155,13 @@ const DEFAULT_SYSTEM_INSTRUCTIONS = `# DomInspector Context
 
 You are connected to a web app with DomInspector.
 
+OUTPUT STYLE — THIS OVERRIDES YOUR DEFAULT HABITS, FOLLOW IT EXACTLY (to keep this cheap to run):
+- Between tool calls, output NO text at all. Do not write "Let me...", "I'll now...", "First I need to...", "The element is in...", "Now let's...", or any other transitional/explanatory sentence before, between, or after tool calls. Silence between tool calls is correct and expected — go straight from one tool call to the next.
+- Do not describe what a file/tool result contains before acting on it. Read it, then act — don't paraphrase it back.
+- On a pure "apply this change" request: after the tools are done, reply with AT MOST one short line (e.g. "Done." or "Updated the margin in Foo.tsx."). Never restate the diff or walk through what you did step by step.
+- Skip pleasantries and hedging entirely.
+- The only time you should write a full sentence is: answering a direct question, reporting a failure, or asking for a decision only the user can make. Everything else is a tool call with no surrounding prose.
+
 CRITICAL WORKFLOW:
 1. ALWAYS call \`list_inspections\` FIRST to check for user feedback context.
 2. IF inspections exist:
@@ -387,6 +394,7 @@ export function setupAcpMiddleware(
       return;
     }
 
+    
     try {
       const body = await readBody(req);
       const parsedBody = JSON.parse(body);

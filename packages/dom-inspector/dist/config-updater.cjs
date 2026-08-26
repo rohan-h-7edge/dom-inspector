@@ -117590,7 +117590,7 @@ Returns: array of element contexts (max 50).`,
 	},
 	verify_dom_position: {
 		name: "verify_dom_position",
-		description: `Diff a live element's position/box against an expected spec (emitted by the move/position features). Returns { pass, mismatches, actual }. Authoritative check — use instead of eyeballing rects.`,
+		description: `Diff a live element's position/box against an expected spec (emitted by the move/position/margin/padding features). Returns { pass, mismatches, actual }. Authoritative check — use instead of eyeballing rects.`,
 		inputSchema: {
 			type: "object",
 			properties: {
@@ -117600,7 +117600,25 @@ Returns: array of element contexts (max 50).`,
 				},
 				expected: {
 					type: "object",
-					description: "Spec object copied verbatim from the 'Apply via AI' prompt: index, siblingCount, elementRect{x,y,width,height}, parentRect{width,height}, margin, rectTolerancePx."
+					description: "Spec object copied verbatim from the 'Apply via AI' prompt: index, siblingCount, elementRect{x,y,width,height}, parentRect{width,height}, margin, padding, style (map of computed style property -> expected value, e.g. flexDirection/justifyContent/alignItems), rectTolerancePx."
+				}
+			},
+			required: ["selector", "expected"]
+		}
+	},
+	verify_flex_layout: {
+		name: "verify_flex_layout",
+		description: `Diff a live flex/grid container's layout against an expected spec (emitted by the flex feature). Checks the container's own computed style (display/flexDirection/justifyContent/alignItems/alignContent/flexWrap/gap) and, optionally, its children's count and order. Returns { pass, mismatches, actual }. Use this instead of verify_dom_position when the change was to a container's flex layout rather than an element's own box/position.`,
+		inputSchema: {
+			type: "object",
+			properties: {
+				selector: {
+					type: "string",
+					description: "CSS selector for the flex/grid container, post-edit."
+				},
+				expected: {
+					type: "object",
+					description: "Spec object copied verbatim from the 'Apply via AI' prompt: style (map of container computed style property -> expected value), childCount (expected number of direct children), childSelectors (expected stable selectors of direct children, in order)."
 				}
 			},
 			required: ["selector", "expected"]
@@ -117612,32 +117630,6 @@ Returns: array of element contexts (max 50).`,
 		inputSchema: {
 			type: "object",
 			properties: {}
-		}
-	},
-	a11y_audit: {
-		name: "a11y_audit",
-		description: `Audit accessibility of the live page (or a subtree). Walks visible elements and reports concrete violations, not just present attributes:
-- img-alt: <img> missing alt
-- accessible-name: interactive element with no accessible name (text, aria-label, aria-labelledby, or <label>)
-- color-contrast: text failing WCAG2.1 AA contrast
-- duplicate-id: repeated id attribute
-- tabindex-order / tabindex-removed: positive tabindex, or negative tabindex on an interactive element
-- aria-hidden-focusable: aria-hidden="true" on a still-focusable element
-- heading-order: skipped heading level (e.g. h1 -> h3)
-
-Returns { totalViolations, bySeverity, violations: [{ rule, severity, selector, message, details? }] }.`,
-		inputSchema: {
-			type: "object",
-			properties: {
-				selector: {
-					type: "string",
-					description: "CSS selector to scope the audit to a subtree. Defaults to document.body (whole page)."
-				},
-				includeContrast: {
-					type: "boolean",
-					description: "Whether to run color-contrast checks (more expensive). Defaults to true."
-				}
-			}
 		}
 	}
 };
@@ -117923,7 +117915,7 @@ async function createInspectorMcpServer(serverContext) {
 		TOOL_SCHEMAS.execute_page_script,
 		TOOL_SCHEMAS.get_page_info,
 		TOOL_SCHEMAS.verify_dom_position,
-		TOOL_SCHEMAS.a11y_audit
+		TOOL_SCHEMAS.verify_flex_layout
 	]);
 	const mapUserPrompts = () => userPrompts.map((p$1) => ({
 		name: p$1.name,
@@ -118830,6 +118822,13 @@ async function loadMcpToolsV5(getTransport) {
 const DEFAULT_SYSTEM_INSTRUCTIONS = `# DomInspector Context
 
 You are connected to a web app with DomInspector.
+
+OUTPUT STYLE — THIS OVERRIDES YOUR DEFAULT HABITS, FOLLOW IT EXACTLY (to keep this cheap to run):
+- Between tool calls, output NO text at all. Do not write "Let me...", "I'll now...", "First I need to...", "The element is in...", "Now let's...", or any other transitional/explanatory sentence before, between, or after tool calls. Silence between tool calls is correct and expected — go straight from one tool call to the next.
+- Do not describe what a file/tool result contains before acting on it. Read it, then act — don't paraphrase it back.
+- On a pure "apply this change" request: after the tools are done, reply with AT MOST one short line (e.g. "Done." or "Updated the margin in Foo.tsx."). Never restate the diff or walk through what you did step by step.
+- Skip pleasantries and hedging entirely.
+- The only time you should write a full sentence is: answering a direct question, reporting a failure, or asking for a decision only the user can make. Everything else is a tool call with no surrounding prose.
 
 CRITICAL WORKFLOW:
 1. ALWAYS call \`list_inspections\` FIRST to check for user feedback context.

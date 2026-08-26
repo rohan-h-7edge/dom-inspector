@@ -1,6 +1,7 @@
 import $ from 'blingblingjs'
 import { getStyle } from '../utilities/'
 import { getDevServerBaseUrl } from '../../../utils/config-loader'
+import { getSourceInfo } from '../../../sourceDetector'
 
 let imgs      = []
   , overlays  = []
@@ -10,6 +11,8 @@ let imgs      = []
 
 let activePlayButton = null
 let activePlayButtonAction = null
+let activeSaveButton = null
+let activeSaveButtonAction = null
 let playButtonTimeout = null
 
 // VisBug's own click-to-select handler intercepts (preventDefault +
@@ -28,6 +31,11 @@ document.addEventListener('click', e => {
     e.stopPropagation()
     activePlayButtonAction && activePlayButtonAction()
   }
+  else if (activeSaveButton && (e.target === activeSaveButton || activeSaveButton.contains(e.target))) {
+    e.preventDefault()
+    e.stopPropagation()
+    activeSaveButtonAction && activeSaveButtonAction()
+  }
 }, true)
 
 const describeElement = (el) => {
@@ -43,7 +51,12 @@ const removePlayButton = () => {
     activePlayButton.remove()
     activePlayButton = null
   }
+  if (activeSaveButton) {
+    activeSaveButton.remove()
+    activeSaveButton = null
+  }
   activePlayButtonAction = null
+  activeSaveButtonAction = null
   clearTimeout(playButtonTimeout)
 }
 
@@ -62,57 +75,72 @@ const savePickedImage = async (dataUrl, filename) => {
   return path
 }
 
+// Shared by both the "Apply via AI" and "Save to Context" actions — saves the
+// picked image to disk if needed and returns the same descriptive text either
+// action sends onward (to the agent immediately, or into the queue for later).
+const buildImageSwapDescription = async (target, cssProp, oldSrc, newSrc, filename) => {
+  const isDataUrl = newSrc.startsWith('data:')
+  const propLabel = cssProp === 'background-image' ? 'CSS `background-image`' : '`<img>` `src`'
+
+  if (isDataUrl) {
+    const savedPath = await savePickedImage(newSrc, filename)
+
+    return `Update this element's image: ${describeElement(target)}\n\n`
+      + `The user picked a new local image to replace the one currently referenced at \`${oldSrc}\`. `
+      + `It has already been saved to the project at \`${savedPath}\` (relative to the project root) — use that file directly, do not ask the user for it.\n\n`
+      + `Move/rename it into the appropriate assets location (following the same convention as the asset currently at \`${oldSrc}\`) if needed, `
+      + `then find this element's source in the codebase (use the available inspection/context tools if needed) and update the ${propLabel} to reference the new file.`
+  }
+
+  return `Update this element's image: ${describeElement(target)}\n\n`
+    + `Change the ${propLabel} from \`${oldSrc}\` to \`${newSrc}\`\n\n`
+    + `Find this element's source in the codebase (use the available inspection/context tools if needed) and apply this change there.`
+}
+
 const showImageSwapPlayButton = (target, cssProp, oldSrc, newSrc, filename) => {
   if (!oldSrc || oldSrc === newSrc) return
   removePlayButton()
 
   const rect = target.getBoundingClientRect()
-  const btn = document.createElement('button')
-  btn.textContent = '▶ Apply via AI'
-  btn.setAttribute('type', 'button')
-  Object.assign(btn.style, {
-    // VisBug draws its own selection tag/label at the top-left of a
-    // selected element's bounding box — anchoring bottom-right instead
-    // avoids colliding with it.
-    position: 'fixed',
-    top: `${Math.min(window.innerHeight - 40, rect.bottom + 6)}px`,
-    left: `${Math.min(window.innerWidth - 140, Math.max(8, rect.right - 130))}px`,
-    zIndex: 2147483647,
-    background: '#22c55e',
-    color: '#fff',
-    border: 'none',
-    borderRadius: '9999px',
-    padding: '6px 12px',
-    fontSize: '12px',
-    fontFamily: 'system-ui, -apple-system, sans-serif',
-    fontWeight: '600',
-    cursor: 'pointer',
-    boxShadow: '0 2px 10px rgba(0,0,0,.3)',
-  })
+
+  const makeButton = (label, background, right) => {
+    const btn = document.createElement('button')
+    btn.textContent = label
+    btn.setAttribute('type', 'button')
+    Object.assign(btn.style, {
+      // VisBug draws its own selection tag/label at the top-left of a
+      // selected element's bounding box — anchoring bottom-right instead
+      // avoids colliding with it.
+      position: 'fixed',
+      top: `${Math.min(window.innerHeight - 40, rect.bottom + 6)}px`,
+      left: `${Math.min(window.innerWidth - right, Math.max(8, rect.right - (right - 10)))}px`,
+      zIndex: 2147483647,
+      background,
+      color: '#fff',
+      border: 'none',
+      borderRadius: '9999px',
+      padding: '6px 12px',
+      fontSize: '12px',
+      fontFamily: 'system-ui, -apple-system, sans-serif',
+      fontWeight: '600',
+      cursor: 'pointer',
+      boxShadow: '0 2px 10px rgba(0,0,0,.3)',
+    })
+    return btn
+  }
+
+  const playBtn = makeButton('▶ Apply via AI', '#22c55e', 140)
+  const saveBtn = makeButton('💾 Save to Context', '#6366f1', 300)
+  // Stack save button above play button so neither overlaps.
+  saveBtn.style.top = `${Math.min(window.innerHeight - 76, rect.bottom + 42)}px`
 
   activePlayButtonAction = async () => {
-    const isDataUrl = newSrc.startsWith('data:')
-    const propLabel = cssProp === 'background-image' ? 'CSS `background-image`' : '`<img>` `src`'
-
     let text
-    if (isDataUrl) {
-      let savedPath
-      try {
-        savedPath = await savePickedImage(newSrc, filename)
-      } catch (err) {
-        console.error('[dom-inspector] Failed to save picked image:', err)
-        return // leave the button up so the user can retry
-      }
-
-      text = `Update this element's image: ${describeElement(target)}\n\n`
-        + `The user picked a new local image to replace the one currently referenced at \`${oldSrc}\`. `
-        + `It has already been saved to the project at \`${savedPath}\` (relative to the project root) — use that file directly, do not ask the user for it.\n\n`
-        + `Move/rename it into the appropriate assets location (following the same convention as the asset currently at \`${oldSrc}\`) if needed, `
-        + `then find this element's source in the codebase (use the available inspection/context tools if needed) and update the ${propLabel} to reference the new file.`
-    } else {
-      text = `Update this element's image: ${describeElement(target)}\n\n`
-        + `Change the ${propLabel} from \`${oldSrc}\` to \`${newSrc}\`\n\n`
-        + `Find this element's source in the codebase (use the available inspection/context tools if needed) and apply this change there.`
+    try {
+      text = await buildImageSwapDescription(target, cssProp, oldSrc, newSrc, filename)
+    } catch (err) {
+      console.error('[dom-inspector] Failed to save picked image:', err)
+      return // leave the buttons up so the user can retry
     }
 
     target.dispatchEvent(new CustomEvent('metatip-style-edit', {
@@ -123,8 +151,27 @@ const showImageSwapPlayButton = (target, cssProp, oldSrc, newSrc, filename) => {
     removePlayButton()
   }
 
-  document.body.appendChild(btn)
-  activePlayButton = btn
+  activeSaveButtonAction = async () => {
+    let description
+    try {
+      description = await buildImageSwapDescription(target, cssProp, oldSrc, newSrc, filename)
+    } catch (err) {
+      console.error('[dom-inspector] Failed to save picked image:', err)
+      return // leave the buttons up so the user can retry
+    }
+
+    target.dispatchEvent(new CustomEvent('save-to-context', {
+      bubbles: true,
+      detail: { sourceInfo: getSourceInfo(target), description },
+    }))
+
+    removePlayButton()
+  }
+
+  document.body.appendChild(playBtn)
+  document.body.appendChild(saveBtn)
+  activePlayButton = playBtn
+  activeSaveButton = saveBtn
   // Auto-dismiss if the user doesn't act on it.
   playButtonTimeout = setTimeout(removePlayButton, 10000)
 }

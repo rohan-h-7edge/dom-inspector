@@ -27,6 +27,10 @@ interface ContextDialogProps {
   onRemoveInspection: (id: string) => void;
   client: McpClientType | null;
   isClientReady: boolean;
+  /** Sends a single inspection to the agent directly (Play button). */
+  onPlayInspection?: (item: InspectionItem) => void;
+  /** Sends every pending inspection to the agent one at a time (Play All button). */
+  onPlayAllInspections?: () => void;
 }
 
 type TabType = "inspections" | "console" | "network" | "stdio" | "page";
@@ -268,6 +272,8 @@ export const ContextDialog: React.FC<ContextDialogProps> = ({
   onRemoveInspection,
   client,
   isClientReady,
+  onPlayInspection,
+  onPlayAllInspections,
 }) => {
   const [activeTab, setActiveTab] = useState<TabType>("inspections");
   const [consoleSearch, setConsoleSearch] = useState("");
@@ -493,7 +499,12 @@ export const ContextDialog: React.FC<ContextDialogProps> = ({
                   <p className="text-xs mt-1">Use ⌥I to inspect elements</p>
                 </div>
               ) : (
-                <InspectionQueue items={inspectionItems} onRemove={onRemoveInspection} />
+                <InspectionQueue
+                  items={inspectionItems}
+                  onRemove={onRemoveInspection}
+                  onPlay={onPlayInspection}
+                  onPlayAll={onPlayAllInspections}
+                />
               )}
             </div>
           )}

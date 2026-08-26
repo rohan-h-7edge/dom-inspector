@@ -1,5 +1,6 @@
 import React from "react";
-import { Loader2, CheckCircle2, XCircle, X } from "lucide-react";
+import { Loader2, CheckCircle2, XCircle, X, Play } from "lucide-react";
+import { formatCopyContext } from "../utils/format";
 
 export type InspectionStatus = "pending" | "in-progress" | "completed" | "failed";
 
@@ -60,10 +61,41 @@ export interface InspectionItem {
 interface InspectionQueueProps {
   items: InspectionItem[];
   onRemove: (id: string) => void;
+  /** Sends this inspection to the agent directly (explicit user trigger, not an auto-pulled queue). */
+  onPlay?: (item: InspectionItem) => void;
+  /** Sends every pending inspection to the agent one at a time (waits for each to finish before sending the next). */
+  onPlayAll?: () => void;
 }
 
-export const InspectionQueue: React.FC<InspectionQueueProps> = ({ items, onRemove }) => {
+/** Builds the prompt sent to the agent when the user presses Play on an inspection. */
+export function buildInspectionPrompt(item: InspectionItem): string {
+  const ctx = item.selectedContext;
+  const output = formatCopyContext({
+    sourceInfo: item.sourceInfo as any,
+    includeElement: ctx?.includeElement ?? true,
+    includeStyles: ctx?.includeStyles ?? true,
+    feedback: item.description,
+    consoleMessages: ctx?.consoleMessages as any,
+    networkRequests: ctx?.networkRequests as any,
+    relatedElements: item.sourceInfo.relatedElements as any,
+    relatedElementIds: item.sourceInfo.relatedElements?.map((_, i) => i),
+  });
+
+  return `${output}
+
+## Your Task
+This is inspection \`${item.id}\`. After making the change (or determining it can't be done), call \`update_inspection_status\` with inspectionId: "${item.id}", status: "completed" (with a short message describing what you did) or status: "failed" (with a short message explaining why).`;
+}
+
+export const InspectionQueue: React.FC<InspectionQueueProps> = ({
+  items,
+  onRemove,
+  onPlay,
+  onPlayAll,
+}) => {
   if (items.length === 0) return null;
+
+  const pendingCount = items.filter((item) => item.status === "pending").length;
 
   const getStatusIcon = (status: InspectionStatus) => {
     if (status === "in-progress")
@@ -105,8 +137,21 @@ export const InspectionQueue: React.FC<InspectionQueueProps> = ({ items, onRemov
   };
 
   return (
-    <div className="w-full bg-white dark:bg-neutral-900 overflow-hidden h-full">
-      <div className="h-full overflow-y-auto p-3 space-y-2">
+    <div className="w-full bg-white dark:bg-neutral-900 overflow-hidden h-full flex flex-col">
+      {onPlayAll && pendingCount > 0 && (
+        <div className="flex-shrink-0 flex justify-end px-3 pt-3">
+          <button
+            type="button"
+            onClick={onPlayAll}
+            title="Send pending inspections to the agent one at a time"
+            className="flex items-center gap-1.5 px-3 h-7 text-xs font-semibold rounded-full bg-emerald-500 text-white hover:bg-emerald-600 transition-colors"
+          >
+            <Play className="h-3 w-3 fill-current" />
+            Play All ({pendingCount})
+          </button>
+        </div>
+      )}
+      <div className="flex-1 overflow-y-auto p-3 space-y-2">
         {items.map((item) => {
           // Calculate context summary
           const ctx = item.selectedContext;
@@ -136,15 +181,29 @@ export const InspectionQueue: React.FC<InspectionQueueProps> = ({ items, onRemov
                       </p>
                     </div>
 
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onRemove(item.id);
-                      }}
-                      className="flex-shrink-0 text-neutral-400 hover:text-neutral-700 dark:text-neutral-500 dark:hover:text-neutral-200 transition-colors"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      {onPlay && item.status === "pending" && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onPlay(item);
+                          }}
+                          title="Send to agent"
+                          className="flex items-center justify-center w-5 h-5 rounded-full bg-emerald-500 text-white hover:bg-emerald-600 transition-colors"
+                        >
+                          <Play className="h-2.5 w-2.5 fill-current" />
+                        </button>
+                      )}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onRemove(item.id);
+                        }}
+                        className="text-neutral-400 hover:text-neutral-700 dark:text-neutral-500 dark:hover:text-neutral-200 transition-colors"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
                   </div>
 
                   <p className="text-xs text-neutral-700 dark:text-neutral-200 mt-1 line-clamp-2">

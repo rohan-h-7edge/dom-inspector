@@ -2,6 +2,7 @@ import $ from 'blingblingjs'
 import { schemeRule } from '../../utilities/'
 import { draggable } from '../../features/'
 import { MetatipStyles, MetatipLightStyles, MetatipDarkStyles } from '../styles.store'
+import { getSourceInfo } from '../../../../sourceDetector'
 
 const escapeAttr = (str) => String(str).replace(/"/g, '&quot;')
 
@@ -32,11 +33,13 @@ export class Metatip extends HTMLElement {
     this.handleValueInput = this.handleValueInput.bind(this)
     this.handleSwatchClick = this.handleSwatchClick.bind(this)
     this.handlePlayClick = this.handlePlayClick.bind(this)
+    this.handleSaveClick = this.handleSaveClick.bind(this)
     this.stopEditKeyPropagation = this.stopEditKeyPropagation.bind(this)
 
     this.$shadow.addEventListener('input', this.handleValueInput)
     this.$shadow.addEventListener('click', this.handleSwatchClick)
     this.$shadow.addEventListener('click', this.handlePlayClick)
+    this.$shadow.addEventListener('click', this.handleSaveClick)
 
     // VisBug's own hotkeys (arrow-key nudging for margin/padding, single-key
     // tool switches, etc.) are bound on `document` via hotkeys-js. Because
@@ -112,14 +115,14 @@ export class Metatip extends HTMLElement {
   }
 
   updatePlayButtonVisibility() {
-    const btn = this.$shadow.querySelector('[data-play]')
-    if (btn) btn.style.display = this.editedValues.size > 0 ? '' : 'none'
+    const display = this.editedValues.size > 0 ? '' : 'none'
+    const playBtn = this.$shadow.querySelector('[data-play]')
+    if (playBtn) playBtn.style.display = display
+    const saveBtn = this.$shadow.querySelector('[data-save]')
+    if (saveBtn) saveBtn.style.display = display
   }
 
-  handlePlayClick(e) {
-    const btn = e.target.closest && e.target.closest('[data-play]')
-    if (!btn || this.editedValues.size === 0) return
-
+  buildStyleEditText() {
     const edits = Array.from(this.editedValues.entries())
       .map(([prop, { oldValue, newValue }]) => ({ prop, oldValue, newValue }))
 
@@ -129,9 +132,33 @@ export class Metatip extends HTMLElement {
 
     const text = `Update the style of this element: ${describeElement(this._lastEl)}\n\nStyle changes requested:\n${lines}\n\nFind this element's source in the codebase (use the available inspection/context tools if needed to locate it) and apply these style changes there.`
 
+    return { text, edits }
+  }
+
+  handlePlayClick(e) {
+    const btn = e.target.closest && e.target.closest('[data-play]')
+    if (!btn || this.editedValues.size === 0) return
+
+    const { text, edits } = this.buildStyleEditText()
+
     this.dispatchEvent(new CustomEvent('metatip-style-edit', {
       bubbles: true,
       detail: { text, edits, el: this._lastEl },
+    }))
+
+    this.editedValues.clear()
+    this.updatePlayButtonVisibility()
+  }
+
+  handleSaveClick(e) {
+    const btn = e.target.closest && e.target.closest('[data-save]')
+    if (!btn || this.editedValues.size === 0) return
+
+    const { text } = this.buildStyleEditText()
+
+    this.dispatchEvent(new CustomEvent('save-to-context', {
+      bubbles: true,
+      detail: { sourceInfo: getSourceInfo(this._lastEl), description: text },
     }))
 
     this.editedValues.clear()
@@ -228,6 +255,7 @@ export class Metatip extends HTMLElement {
             <span divider>×</span>
             <span dimension contenteditable="true" data-prop="height" data-original="${roundedHeight}">${roundedHeight}</span><span brand>px</span>
           </small>
+          <button data-save type="button" style="display:none;" title="Save these style changes to context (without sending to the AI agent yet)">💾</button>
           <button data-play type="button" style="display:none;" title="Send these style changes to the AI agent">▶</button>
         </header>
 

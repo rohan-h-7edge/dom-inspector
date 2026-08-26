@@ -3691,6 +3691,10 @@
       }
     }
 
+    .hover\:bg-emerald-600:hover {
+      background-color: var(--color-emerald-600);
+    }
+
     .hover\:bg-fuchsia-500\/10:hover {
       background-color: #e12afb1a;
     }

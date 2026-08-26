@@ -17,7 +17,7 @@ import {
 import { Shimmer } from "../../src/components/ai-elements/shimmer";
 import { GetPromptResultSchema } from "@modelcontextprotocol/sdk/types.js";
 import type { UIMessage } from "ai";
-import { type InspectionItem } from "./InspectionQueue";
+import { buildInspectionPrompt, type InspectionItem } from "./InspectionQueue";
 import { ContextDialog } from "./ContextDialog";
 import { DesignDialog } from "./DesignDialog";
 import type { McpClientType } from "../hooks/useMcp";
@@ -269,6 +269,13 @@ export const InspectorBar = ({
     }
   }, [isWorking, allowHover]);
 
+  // "Play All" for the inspection queue: sends pending inspections to the
+  // agent one at a time, only advancing to the next once the agent finishes
+  // the current one (isWorking flips back to false) — never combined into a
+  // single prompt.
+  const playAllQueueRef = useRef<InspectionItem[]>([]);
+  const wasWorkingRef = useRef(isWorking);
+
   // Listen to inspection progress updates
   useEffect(() => {
     function handleInspectionProgress(event: Event) {
@@ -382,6 +389,25 @@ export const InspectorBar = ({
       AVAILABLE_AGENTS[0];
     onSubmitAgent(text, agentToSubmit, sessionId || undefined);
   };
+
+  const playNextQueued = () => {
+    const next = playAllQueueRef.current.shift();
+    if (!next) return;
+    submitToAgent(buildInspectionPrompt(next));
+    setActivePanel("chat");
+  };
+
+  const handlePlayAllInspections = () => {
+    playAllQueueRef.current = inspectionItems.filter((item) => item.status === "pending");
+    playNextQueued();
+  };
+
+  useEffect(() => {
+    if (wasWorkingRef.current && !isWorking && playAllQueueRef.current.length > 0) {
+      playNextQueued();
+    }
+    wasWorkingRef.current = isWorking;
+  }, [isWorking]);
 
   // Listen for style edits made from the metatip's inline editor + play
   // button (packages/dom-inspector/client/vendor/visbug/components/metatip)
@@ -873,6 +899,15 @@ export const InspectorBar = ({
         onRemoveInspection={onRemoveInspection}
         client={mcpClient}
         isClientReady={toolsReady}
+        onPlayInspection={(item) => {
+          submitToAgent(buildInspectionPrompt(item));
+          setShowContextDialog(false);
+          setActivePanel("chat");
+        }}
+        onPlayAllInspections={() => {
+          handlePlayAllInspections();
+          setShowContextDialog(false);
+        }}
       />
 
       {/* Design Dialog */}

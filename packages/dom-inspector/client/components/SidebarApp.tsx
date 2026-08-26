@@ -10,9 +10,10 @@ import {
   Wifi,
   WifiOff,
 } from "lucide-react";
+
 import { GetPromptResultSchema } from "@modelcontextprotocol/sdk/types.js";
 import type { UIMessage } from "ai";
-import { InspectionQueue, type InspectionItem } from "./InspectionQueue";
+import { InspectionQueue, buildInspectionPrompt, type InspectionItem } from "./InspectionQueue";
 import type { McpClientType } from "../hooks/useMcp";
 import { MessageDetail } from "./MessageDetail";
 import { useIslandState } from "../hooks/useIslandState";
@@ -270,6 +271,36 @@ export const SidebarApp = ({
     }
   };
 
+  const handlePlayInspection = (item: InspectionItem) => {
+    const agentToSubmit =
+      availableAgents.find((a) => a.name === selectedAgent) ||
+      availableAgents[0] ||
+      AVAILABLE_AGENTS[0];
+    onSubmitAgent(buildInspectionPrompt(item), agentToSubmit, sessionId || undefined);
+  };
+
+  // "Play All": sends pending inspections to the agent one at a time, only
+  // advancing once the current one finishes (isWorking flips back to false).
+  const playAllQueueRef = useRef<InspectionItem[]>([]);
+  const wasWorkingRef = useRef(isWorking);
+
+  const playNextQueued = () => {
+    const next = playAllQueueRef.current.shift();
+    if (next) handlePlayInspection(next);
+  };
+
+  const handlePlayAllInspections = () => {
+    playAllQueueRef.current = inspectionItems.filter((item) => item.status === "pending");
+    playNextQueued();
+  };
+
+  useEffect(() => {
+    if (wasWorkingRef.current && !isWorking && playAllQueueRef.current.length > 0) {
+      playNextQueued();
+    }
+    wasWorkingRef.current = isWorking;
+  }, [isWorking]);
+
   const getConnectionStatusColor = () => {
     switch (connectionStatus) {
       case "connected":
@@ -416,7 +447,12 @@ export const SidebarApp = ({
               <ScrollArea className="flex-1">
                 <div className="p-3 space-y-2">
                   {inspectionItems.length > 0 ? (
-                    <InspectionQueue items={inspectionItems} onRemove={onRemoveInspection} />
+                    <InspectionQueue
+                      items={inspectionItems}
+                      onRemove={onRemoveInspection}
+                      onPlay={handlePlayInspection}
+                      onPlayAll={handlePlayAllInspections}
+                    />
                   ) : (
                     <div className="flex flex-col items-center justify-center py-12 px-4 text-center text-muted-foreground/40">
                       <Inbox className="w-10 h-10 mb-3 opacity-20" />

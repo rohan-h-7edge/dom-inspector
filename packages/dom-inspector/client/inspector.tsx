@@ -392,6 +392,38 @@ const InspectorContainer: React.FC<InspectorContainerProps> = ({ shadowRoot, mou
     return () => window.removeEventListener("dom-inspector:inspect-element", handleCustomInspect);
   }, []); // Dependencies relying on state setters which are stable
 
+  // Listen for "save to context" — a VisBug feature (image swap, metatip
+  // style edits, ...) offering the queue as an alternative to sending
+  // straight to the agent via its "Apply via AI" play button.
+  useEffect(() => {
+    const handleSaveToContext = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      const { sourceInfo, description } = customEvent.detail || {};
+      if (!sourceInfo || !description) return;
+
+      const newItem: InspectionItem = {
+        id: `inspection-${Date.now()}`,
+        sourceInfo: {
+          file: sourceInfo.file,
+          component: sourceInfo.component,
+          line: sourceInfo.line,
+          column: sourceInfo.column,
+          elementInfo: sourceInfo.elementInfo,
+        },
+        description,
+        status: "pending",
+        timestamp: Date.now(),
+      };
+
+      setInspections((prev) => [...prev, newItem]);
+      saveInspectionItems([...loadInspectionItems(), newItem]);
+      showNotif("Saved to context");
+    };
+
+    window.addEventListener("save-to-context", handleSaveToContext);
+    return () => window.removeEventListener("save-to-context", handleSaveToContext);
+  }, [setInspections, showNotif]);
+
   const { selection: visbugSelection, finalizeSelection } = useVisBugInspector({
     isActive,
     isWaitingForFeedback: bubbleMode !== null,

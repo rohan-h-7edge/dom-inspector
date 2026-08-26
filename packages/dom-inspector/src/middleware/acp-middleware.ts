@@ -163,11 +163,6 @@ OUTPUT STYLE — THIS OVERRIDES YOUR DEFAULT HABITS, FOLLOW IT EXACTLY (to keep 
 - The only time you should write a full sentence is: answering a direct question, reporting a failure, or asking for a decision only the user can make. Everything else is a tool call with no surrounding prose.
 
 CRITICAL WORKFLOW:
-1. ALWAYS call \`list_inspections\` FIRST to check for user feedback context.
-2. IF inspections exist:
-   - If user intent is ACTIONABLE (e.g., "fix", "start", "optimize") -> Analyze & Execute immediately.
-   - Otherwise -> Answer user's question first, then ask if they want to use the pending inspections.
-
 Available tools:
 - **get_page_info**: Get page overview with accessibility tree (start here to understand the page)
 - **list_inspections**: Get pending user feedback context
@@ -500,38 +495,26 @@ export function setupAcpMiddleware(
       const systemPrompt =
         agent.acpSystemPrompt ?? acpOptions?.acpSystemPrompt ?? DEFAULT_SYSTEM_INSTRUCTIONS;
 
-      // Merge system prompt into the first user message
-      const modelMessages = convertToModelMessages(messages);
-      const enhancedMessages = modelMessages.map((msg: any, index: number) => {
-        if (index === 0 && msg.role === "user" && Array.isArray(msg.content)) {
-          return {
-            ...msg,
-            content: [
-              {
-                type: "text",
-                text: `<system_instructions>
-${systemPrompt}
+      // Passed as `system` (not spliced into message[0]) so it applies on every
+      // turn of the conversation, not just the first — otherwise directives like
+      // "ALWAYS call list_inspections FIRST" are only seen once and get lost as
+      // the conversation grows.
+      const fullSystemPrompt = `${systemPrompt}
 ${
   isAutomated
     ? `- **chrome_devtools**: Access Chrome DevTools for network requests, console logs, page navigation, and element interaction`
     : `- **get_network_requests**: Get browser network requests (list or details by reqid) - uses local storage
 - **get_console_messages**: Get browser console logs (list or details by msgid) - uses local storage`
-}
-</system_instructions>
-`,
-              },
-              ...msg.content,
-            ],
-          };
-        }
-        return msg;
-      });
+}`;
+
+      const modelMessages = convertToModelMessages(messages);
 
       const result = streamText({
         model: provider.languageModel(model, mode),
         // Ensure raw chunks like agent plan are included for streaming
         includeRawChunks: true,
-        messages: enhancedMessages,
+        system: fullSystemPrompt,
+        messages: modelMessages,
         abortSignal: abortController.signal,
         // Use acpTools to wrap MCP tools with ACP provider dynamic tool
         tools: acpTools(mcpTools),

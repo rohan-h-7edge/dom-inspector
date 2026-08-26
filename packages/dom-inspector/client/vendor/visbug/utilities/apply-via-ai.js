@@ -13,8 +13,12 @@
 // first) and invoke our own action directly, before VisBug's document.body
 // listener ever sees the event.
 
+import { getSourceInfo } from '../../../sourceDetector'
+
 let activeButton = null
 let activeAction = null
+let activeSaveButton = null
+let activeSaveAction = null
 let dismissTimeout = null
 
 document.addEventListener('click', e => {
@@ -22,6 +26,11 @@ document.addEventListener('click', e => {
     e.preventDefault()
     e.stopPropagation()
     activeAction && activeAction()
+  }
+  else if (activeSaveButton && (e.target === activeSaveButton || activeSaveButton.contains(e.target))) {
+    e.preventDefault()
+    e.stopPropagation()
+    activeSaveAction && activeSaveAction()
   }
 }, true)
 
@@ -68,28 +77,25 @@ export const removeApplyViaAiButton = () => {
     activeButton.remove()
     activeButton = null
   }
+  if (activeSaveButton) {
+    activeSaveButton.remove()
+    activeSaveButton = null
+  }
   activeAction = null
+  activeSaveAction = null
   clearTimeout(dismissTimeout)
 }
 
-// `anchorEl` is used only to position the button near the relevant element;
-// `text` is the full prompt sent to the agent when clicked.
-export const showApplyViaAiButton = (anchorEl, text) => {
-  removeApplyViaAiButton()
-
-  const rect = anchorEl.getBoundingClientRect()
+const makeFloatingButton = (label, background, rect, right, top) => {
   const btn = document.createElement('button')
-  btn.textContent = '▶ Apply via AI'
+  btn.textContent = label
   btn.setAttribute('type', 'button')
   Object.assign(btn.style, {
-    // VisBug draws its own selection tag/label at the top-left of a
-    // selected element's bounding box — anchoring bottom-right instead
-    // avoids colliding with it.
     position: 'fixed',
-    top: `${Math.min(window.innerHeight - 40, rect.bottom + 6)}px`,
-    left: `${Math.min(window.innerWidth - 140, Math.max(8, rect.right - 130))}px`,
+    top: `${top}px`,
+    left: `${Math.min(window.innerWidth - right, Math.max(8, rect.right - (right - 10)))}px`,
     zIndex: 2147483647,
-    background: '#22c55e',
+    background,
     color: '#fff',
     border: 'none',
     borderRadius: '9999px',
@@ -100,6 +106,24 @@ export const showApplyViaAiButton = (anchorEl, text) => {
     cursor: 'pointer',
     boxShadow: '0 2px 10px rgba(0,0,0,.3)',
   })
+  return btn
+}
+
+// `anchorEl` is used only to position the buttons near the relevant element;
+// `text` is the full prompt sent to the agent (or saved to the context queue)
+// when clicked.
+export const showApplyViaAiButton = (anchorEl, text) => {
+  removeApplyViaAiButton()
+
+  const rect = anchorEl.getBoundingClientRect()
+  // VisBug draws its own selection tag/label at the top-left of a selected
+  // element's bounding box — anchoring bottom-right instead avoids colliding
+  // with it. The save button stacks above the play button.
+  const playTop = Math.min(window.innerHeight - 40, rect.bottom + 6)
+  const saveTop = Math.min(window.innerHeight - 76, rect.bottom + 42)
+
+  const playBtn = makeFloatingButton('▶ Apply via AI', '#22c55e', rect, 140, playTop)
+  const saveBtn = makeFloatingButton('💾 Save to Context', '#6366f1', rect, 300, saveTop)
 
   activeAction = () => {
     anchorEl.dispatchEvent(new CustomEvent('metatip-style-edit', {
@@ -109,8 +133,18 @@ export const showApplyViaAiButton = (anchorEl, text) => {
     removeApplyViaAiButton()
   }
 
-  document.body.appendChild(btn)
-  activeButton = btn
+  activeSaveAction = () => {
+    anchorEl.dispatchEvent(new CustomEvent('save-to-context', {
+      bubbles: true,
+      detail: { sourceInfo: getSourceInfo(anchorEl), description: text },
+    }))
+    removeApplyViaAiButton()
+  }
+
+  document.body.appendChild(playBtn)
+  document.body.appendChild(saveBtn)
+  activeButton = playBtn
+  activeSaveButton = saveBtn
   // Auto-dismiss if the user doesn't act on it.
   dismissTimeout = setTimeout(removeApplyViaAiButton, 10000)
 }

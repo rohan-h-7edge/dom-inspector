@@ -84,7 +84,9 @@ export function buildInspectionPrompt(item: InspectionItem): string {
   return `${output}
 
 ## Your Task
-This is inspection \`${item.id}\`. After making the change (or determining it can't be done), call \`update_inspection_status\` with inspectionId: "${item.id}", status: "completed" (with a short message describing what you did) or status: "failed" (with a short message explaining why).`;
+This is inspection \`${item.id}\`. After investigating, call \`update_inspection_status\` with inspectionId: "${item.id}":
+- status: "completed" — ONLY if you actually edited code to make this change. Include a short message describing what you changed.
+- status: "failed" — if you made NO code changes for any reason, including deciding the change wasn't needed, was already done, or wasn't possible. Include a short message explaining why. Never mark "completed" without a real code edit.`;
 }
 
 export const InspectionQueue: React.FC<InspectionQueueProps> = ({

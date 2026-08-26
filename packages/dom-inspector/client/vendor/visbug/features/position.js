@@ -1,6 +1,7 @@
 import $ from 'blingblingjs'
 import hotkeys from 'hotkeys-js'
 import { metaKey, getStyle, getSide, showHideSelected, describeElement, showApplyViaAiButton, buildStableSelector } from '../utilities/'
+import { refreshMeasurements } from './measurements'
 
 const key_events = 'up,down,left,right'
   .split(',')
@@ -225,6 +226,7 @@ export function draggable({el, surface = el, cursor = 'move', clickEvent}) {
       el.style.top  = state.element.y + e.clientY - state.mouse.y + 'px'
     }
 
+    refreshMeasurements(el)
     state.travelDistance += 1
   }
 
@@ -234,7 +236,47 @@ export function draggable({el, surface = el, cursor = 'move', clickEvent}) {
   return el
 }
 
+// Arrow-key nudges fire one at a time, but a person typically presses the
+// key several times in a row to reach a position — announcing (and showing
+// the Apply via AI button) after every single keystroke would spam it and
+// report tiny 1px deltas. So: capture the "before" snapshot only on the
+// first nudge of a run, and keep pushing the announcement out on a debounce
+// as further nudges arrive; it only actually fires once the run pauses,
+// reporting the full cumulative shift — mirroring how a mouse drag captures
+// "before" once on mousedown and announces once on mouseup.
+const keyboardMoveSessions = new WeakMap()
+const KEYBOARD_MOVE_DEBOUNCE_MS = 600
+
+const trackKeyboardMove = el => {
+  let session = keyboardMoveSessions.get(el)
+
+  if (!session) {
+    const computedBefore = getComputedStyle(el)
+    session = {
+      before: {
+        position: computedBefore.position,
+        margin: computedBefore.margin,
+        top: computedBefore.top,
+        left: computedBefore.left,
+        rect: roundRect(el.getBoundingClientRect()),
+      },
+      timer: null,
+    }
+    keyboardMoveSessions.set(el, session)
+  }
+
+  clearTimeout(session.timer)
+  session.timer = setTimeout(() => {
+    keyboardMoveSessions.delete(el)
+    announcePositionMove(el, session.before, {
+      rect: roundRect(el.getBoundingClientRect()),
+    })
+  }, KEYBOARD_MOVE_DEBOUNCE_MS)
+}
+
 export function positionElement(els, direction) {
+  els.forEach(el => trackKeyboardMove(el))
+
   els
     .map(el => ensurePositionable(el))
     .map(el => showHideSelected(el))
@@ -250,10 +292,12 @@ export function positionElement(els, direction) {
           ? payload.current + payload.amount
           : payload.current - payload.amount
       }))
-    .forEach(({el, style, position}) =>
+    .forEach(({el, style, position}) => {
       el instanceof SVGElement
         ? setTranslateOnSVG(el, direction, position)
-        : el.style[style] = position + 'px')
+        : el.style[style] = position + 'px'
+      refreshMeasurements(el)
+    })
 }
 
 const extractCurrentValueAndSide = (el, direction) => {

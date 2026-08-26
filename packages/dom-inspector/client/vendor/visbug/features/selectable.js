@@ -410,7 +410,7 @@ export function Selectable(visbug) {
         || tool === 'inspector'),
     })
 
-    if (tool === 'guides' && selected.length >= 1 && !selected.includes($target)) {
+    if ((tool === 'guides' || tool === 'position') && selected.length >= 1 && !selected.includes($target)) {
       $target.setAttribute('data-measuring', true)
       const [$anchor] = selected
       createMeasurements({$anchor, $target})

@@ -161,3 +161,15 @@ export function takeMeasurementOwnership() {
   state.distances = []
   return distances
 }
+
+// Recompute the currently-shown measurement against the same target, using
+// the anchor's latest bounding box — for when the anchor itself moves (drag,
+// keyboard nudge) while the hovered target stays put. createMeasurements()
+// normally no-ops on a repeat call with the same target (it assumes nothing
+// changed); clearing state.target first forces it to actually redraw.
+export function refreshMeasurements($anchor) {
+  if (!state.target) return
+  const $target = state.target
+  state.target = null
+  createMeasurements({$anchor, $target})
+}

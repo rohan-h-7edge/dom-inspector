@@ -85,6 +85,7 @@
     --color-orange-500: oklch(70.5% .213 47.604);
     --color-amber-400: oklch(82.8% .189 84.429);
     --color-amber-500: oklch(76.9% .188 70.08);
+    --color-amber-600: oklch(66.6% .179 58.318);
     --color-yellow-50: oklch(98.7% .026 102.212);
     --color-yellow-100: oklch(97.3% .071 103.193);
     --color-yellow-200: oklch(94.5% .129 101.54);
@@ -3665,6 +3666,10 @@
       .hover\:bg-accent\/80:hover {
         background-color: color-mix(in oklab, var(--color-accent) 80%, transparent);
       }
+    }
+
+    .hover\:bg-amber-600:hover {
+      background-color: var(--color-amber-600);
     }
 
     .hover\:bg-background:hover {

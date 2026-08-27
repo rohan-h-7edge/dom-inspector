@@ -1,5 +1,5 @@
 import React from "react";
-import { Loader2, CheckCircle2, XCircle, X, Play } from "lucide-react";
+import { Loader2, CheckCircle2, XCircle, X, Play, RotateCcw } from "lucide-react";
 import { formatCopyContext } from "../utils/format";
 
 export type InspectionStatus = "pending" | "in-progress" | "completed" | "failed";
@@ -194,6 +194,18 @@ export const InspectionQueue: React.FC<InspectionQueueProps> = ({
                           className="flex items-center justify-center w-5 h-5 rounded-full bg-emerald-500 text-white hover:bg-emerald-600 transition-colors"
                         >
                           <Play className="h-2.5 w-2.5 fill-current" />
+                        </button>
+                      )}
+                      {onPlay && item.status === "failed" && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onPlay(item);
+                          }}
+                          title="Retry with the agent"
+                          className="flex items-center justify-center w-5 h-5 rounded-full bg-amber-500 text-white hover:bg-amber-600 transition-colors"
+                        >
+                          <RotateCcw className="h-2.5 w-2.5" />
                         </button>
                       )}
                       <button

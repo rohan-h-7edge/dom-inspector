@@ -117624,6 +117624,24 @@ Returns: array of element contexts (max 50).`,
 			required: ["selector", "expected"]
 		}
 	},
+	edit_element_text: {
+		name: "edit_element_text",
+		description: "Set the text content of a live DOM element, mirroring the VisBug 'edit text' tool but driven by AI instead of a human typing. Replaces the element's textContent (no HTML). Returns { selector, previousText, newText }.",
+		inputSchema: {
+			type: "object",
+			properties: {
+				selector: {
+					type: "string",
+					description: "CSS selector for the target element."
+				},
+				text: {
+					type: "string",
+					description: "New text content to set on the element."
+				}
+			},
+			required: ["selector", "text"]
+		}
+	},
 	get_page_info: {
 		name: "get_page_info",
 		description: "Get page overview with accessibility tree. Returns URL, title, viewport, document size, and semantic structure (landmarks, headings, forms, links). Start here to understand the page.",
@@ -117915,7 +117933,8 @@ async function createInspectorMcpServer(serverContext) {
 		TOOL_SCHEMAS.execute_page_script,
 		TOOL_SCHEMAS.get_page_info,
 		TOOL_SCHEMAS.verify_dom_position,
-		TOOL_SCHEMAS.verify_flex_layout
+		TOOL_SCHEMAS.verify_flex_layout,
+		TOOL_SCHEMAS.edit_element_text
 	]);
 	const mapUserPrompts = () => userPrompts.map((p$1) => ({
 		name: p$1.name,
@@ -118830,12 +118849,13 @@ OUTPUT STYLE — THIS OVERRIDES YOUR DEFAULT HABITS, FOLLOW IT EXACTLY (to keep 
 - Skip pleasantries and hedging entirely.
 - The only time you should write a full sentence is: answering a direct question, reporting a failure, or asking for a decision only the user can make. Everything else is a tool call with no surrounding prose.
 
-CRITICAL WORKFLOW:
-1. ALWAYS call \`list_inspections\` FIRST to check for user feedback context.
-2. IF inspections exist:
-   - If user intent is ACTIONABLE (e.g., "fix", "start", "optimize") -> Analyze & Execute immediately.
-   - Otherwise -> Answer user's question first, then ask if they want to use the pending inspections.
+CODING STANDARDS — apply to every code change you make:
+- Prefer canonical design-system/scale values (e.g. Tailwind's spacing/sizing scale) over arbitrary one-off values (e.g. \`pt-[33px]\`) unless the existing code around it already uses arbitrary values for the same purpose.
+- Match the file's existing conventions (naming, formatting, component patterns) rather than introducing a new style.
+- Before considering a change done, check it against the project's existing lint/format setup if one is visible (e.g. an eslint/oxlint/prettier config) — fix warnings your change introduces.
+- Don't leave unrelated code worse than you found it, but don't refactor beyond the scope of the requested change either.
 
+CRITICAL WORKFLOW:
 Available tools:
 - **get_page_info**: Get page overview with accessibility tree (start here to understand the page)
 - **list_inspections**: Get pending user feedback context
@@ -119056,26 +119076,15 @@ function setupAcpMiddleware(middlewares, serverContext, acpOptions) {
 					if (shouldCleanupProvider) provider.cleanup();
 				}
 			});
-			const systemPrompt = agent.acpSystemPrompt ?? acpOptions?.acpSystemPrompt ?? DEFAULT_SYSTEM_INSTRUCTIONS;
-			const enhancedMessages = (0, ai.convertToModelMessages)(messages).map((msg, index$1) => {
-				if (index$1 === 0 && msg.role === "user" && Array.isArray(msg.content)) return {
-					...msg,
-					content: [{
-						type: "text",
-						text: `<system_instructions>
-${systemPrompt}
+			const fullSystemPrompt = `${agent.acpSystemPrompt ?? acpOptions?.acpSystemPrompt ?? DEFAULT_SYSTEM_INSTRUCTIONS}
 ${isAutomated ? `- **chrome_devtools**: Access Chrome DevTools for network requests, console logs, page navigation, and element interaction` : `- **get_network_requests**: Get browser network requests (list or details by reqid) - uses local storage
-- **get_console_messages**: Get browser console logs (list or details by msgid) - uses local storage`}
-</system_instructions>
-`
-					}, ...msg.content]
-				};
-				return msg;
-			});
+- **get_console_messages**: Get browser console logs (list or details by msgid) - uses local storage`}`;
+			const modelMessages = (0, ai.convertToModelMessages)(messages);
 			const response = (0, ai.streamText)({
 				model: provider.languageModel(model, mode),
 				includeRawChunks: true,
-				messages: enhancedMessages,
+				system: fullSystemPrompt,
+				messages: modelMessages,
 				abortSignal: abortController.signal,
 				tools: acpTools(mcpTools),
 				onError: (error$2) => {

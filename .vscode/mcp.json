@@ -1,0 +1,8 @@
+{
+  "servers": {
+    "dom-inspector": {
+      "type": "sse",
+      "url": "http://localhost:6138/__mcp__/sse?clientId=vscode&puppetId=inspector"
+    }
+  }
+}

@@ -822,6 +822,22 @@ ${a11yTree.length > 0 ? a11yTree.join("\n") : "(empty or no semantic structure)"
       };
     }
 
+    // Set an element's text content directly — the AI-driven counterpart to
+    // VisBug's interactive contenteditable "edit text" tool.
+    function editElementText(args: { selector?: string; text?: string } = {}) {
+      const { selector, text } = args;
+      if (!selector) return { error: "No selector provided" };
+      if (text === undefined) return { error: "No text provided" };
+
+      const el = document.querySelector(selector);
+      if (!el) return { error: `No element found for selector: ${selector}` };
+
+      const previousText = el.textContent ?? "";
+      el.textContent = text;
+
+      return { selector, previousText, newText: text };
+    }
+
     eventHandlers.forEach(({ event, handler }) => {
       window.addEventListener(event, handler as EventListener);
     });
@@ -886,6 +902,13 @@ ${a11yTree.length > 0 ? a11yTree.join("\n") : "(empty or no semantic structure)"
         implementation: wrapToolImplementation(
           TOOL_SCHEMAS.verify_flex_layout.name,
           verifyFlexLayout as unknown as (args: Record<string, unknown> | undefined) => unknown,
+        ),
+      },
+      {
+        ...TOOL_SCHEMAS.edit_element_text,
+        implementation: wrapToolImplementation(
+          TOOL_SCHEMAS.edit_element_text.name,
+          editElementText as unknown as (args: Record<string, unknown> | undefined) => unknown,
         ),
       },
     ];

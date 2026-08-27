@@ -1,0 +1,7 @@
+{
+  "mcpServers": {
+    "dom-inspector": {
+      "url": "http://localhost:6138/__mcp__/sse?clientId=cursor&puppetId=inspector"
+    }
+  }
+}

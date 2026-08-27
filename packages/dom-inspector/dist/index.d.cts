@@ -1,4 +1,4 @@
-import * as unplugin0 from "unplugin";
+import * as unplugin1 from "unplugin";
 import { McpServer } from "@agentclientprotocol/sdk";
 
 //#region src/utils/config-updater.d.ts
@@ -244,10 +244,10 @@ interface DomInspectorOptions extends McpConfigOptions, AcpOptions {
 }
 //#endregion
 //#region src/core.d.ts
-declare const unplugin: unplugin0.UnpluginInstance<DomInspectorOptions | undefined, boolean>;
+declare const unplugin: unplugin1.UnpluginInstance<DomInspectorOptions | undefined, boolean>;
 //#endregion
 //#region src/core-external.d.ts
-declare const unpluginExternal: unplugin0.UnpluginInstance<DomInspectorOptions | undefined, boolean>;
+declare const unpluginExternal: unplugin1.UnpluginInstance<DomInspectorOptions | undefined, boolean>;
 //#endregion
 //#region src/turbopack.d.ts
 interface TurbopackDomInspectorOptions extends DomInspectorOptions {
@@ -272,7 +272,7 @@ interface TurbopackDomInspectorOptions extends DomInspectorOptions {
 declare function turbopackDomInspector(options?: TurbopackDomInspectorOptions): any;
 //#endregion
 //#region src/index.d.ts
-declare const external: unplugin0.UnpluginInstance<DomInspectorOptions | undefined, boolean>;
+declare const external: unplugin1.UnpluginInstance<DomInspectorOptions | undefined, boolean>;
 declare module "virtual:dom-inspector-mcp" {}
 //#endregion
 export { type CustomEditorConfig, type DomInspectorOptions, type EditorId, type McpConfigOptions, type TurbopackDomInspectorOptions, unplugin as default, unplugin, external, turbopackDomInspector, unpluginExternal };

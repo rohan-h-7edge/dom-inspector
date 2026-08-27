@@ -19,7 +19,7 @@ import { GetPromptResultSchema } from "@modelcontextprotocol/sdk/types.js";
 import type { UIMessage } from "ai";
 import { buildInspectionPrompt, type InspectionItem } from "./InspectionQueue";
 import { ContextDialog } from "./ContextDialog";
-import { DesignDialog } from "./DesignDialog";
+import { AnnotationDialog } from "./AnnotationDialog";
 import type { McpClientType } from "../hooks/useMcp";
 import { MessageDetail } from "./MessageDetail";
 import { useIslandState } from "../hooks/useIslandState";
@@ -82,7 +82,7 @@ export const InspectorBar = ({
   const [isAgentSelectorOpen, setIsAgentSelectorOpen] = useState(false);
   const [configInfoAgent, setConfigInfoAgent] = useState<string | null>(null);
   const [showContextDialog, setShowContextDialog] = useState(false);
-  const [showDesignDialog, setShowDesignDialog] = useState(false);
+  const [showAnnotationDialog, setShowAnnotationDialog] = useState(false);
 
   const { prompts } = usePrompts(mcpClient || null);
 
@@ -677,11 +677,11 @@ export const InspectorBar = ({
               </button>
               <button
                 type="button"
-                onClick={() => setShowDesignDialog(true)}
+                onClick={() => setShowAnnotationDialog(true)}
                 className={cn(
                   "relative flex items-center justify-center w-7 h-7 rounded-full transition-colors flex-shrink-0",
                   "hover:bg-accent/50",
-                  showDesignDialog && "bg-accent/50 text-foreground",
+                  showAnnotationDialog && "bg-accent/50 text-foreground",
                 )}
                 title="Design a new screen from an image"
               >
@@ -910,10 +910,10 @@ export const InspectorBar = ({
         }}
       />
 
-      {/* Design Dialog */}
-      <DesignDialog
-        open={showDesignDialog}
-        onOpenChange={setShowDesignDialog}
+      {/* Annotation Dialog */}
+      <AnnotationDialog
+        open={showAnnotationDialog}
+        onOpenChange={setShowAnnotationDialog}
         onSubmitAgent={(text) => {
           submitToAgent(text);
           setActivePanel("chat");

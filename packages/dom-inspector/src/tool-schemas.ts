@@ -181,6 +181,20 @@ Returns: array of element contexts (max 50).`,
     },
   },
 
+  edit_element_text: {
+    name: "edit_element_text",
+    description:
+      "Set the text content of a live DOM element, mirroring the VisBug 'edit text' tool but driven by AI instead of a human typing. Replaces the element's textContent (no HTML). Returns { selector, previousText, newText }.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        selector: { type: "string", description: "CSS selector for the target element." },
+        text: { type: "string", description: "New text content to set on the element." },
+      },
+      required: ["selector", "text"] as string[],
+    },
+  },
+
   get_page_info: {
     name: "get_page_info",
     description:

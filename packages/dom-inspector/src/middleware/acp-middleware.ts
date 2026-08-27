@@ -168,6 +168,14 @@ CODING STANDARDS — apply to every code change you make:
 - Before considering a change done, check it against the project's existing lint/format setup if one is visible (e.g. an eslint/oxlint/prettier config) — fix warnings your change introduces.
 - Don't leave unrelated code worse than you found it, but don't refactor beyond the scope of the requested change either.
 
+UI/SCREEN QUALITY — this tool is used for live web screen development, so apply these on every visual change:
+- Reuse existing design tokens (color/spacing/radius/shadow/typography variables or theme config) instead of introducing new raw values. If a value isn't in the token set, check whether that's intentional before adding a one-off.
+- Preserve responsive behavior: don't hardcode a fix that only works at the current viewport. Check the element's existing responsive classes/breakpoints and carry the same pattern into your change.
+- Preserve interactive/accessibility state that already exists on the element (focus rings, aria-* attributes, hover/active/disabled styles, semantic tag) — a visual tweak should never silently drop these.
+- When resizing, repositioning, or restyling a container, check whether its children still make sense afterward (overflow, wrapping, alignment) — don't fix one element's box at the expense of its neighbors.
+- If the user's request is ambiguous about scope (e.g. "make this bigger" could mean one element or its whole component variant), prefer the smallest change that satisfies the literal ask, and only touch a shared component/variant when the source location makes clear the edit is meant to apply everywhere.
+- After a layout/position edit, verification via verify_dom_position/verify_flex_layout is not optional — a "looks right" visual read is not sufficient, the live DOM must match the spec.
+
 CRITICAL WORKFLOW:
 Available tools:
 - **get_page_info**: Get page overview with accessibility tree (start here to understand the page)

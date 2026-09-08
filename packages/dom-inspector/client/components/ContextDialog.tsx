@@ -15,6 +15,9 @@ import {
   X,
   Copy,
   Check,
+  Gauge,
+  RotateCcw,
+  Sparkles,
 } from "lucide-react";
 import { cn } from "../lib/utils";
 import type { NetworkRequest } from "../types";
@@ -31,9 +34,15 @@ interface ContextDialogProps {
   onPlayInspection?: (item: InspectionItem) => void;
   /** Sends every pending inspection to the agent one at a time (Play All button). */
   onPlayAllInspections?: () => void;
+  /** Sends a free-form prompt straight to the agent (e.g. "fix this bad performance metric"). */
+  onSubmitToAgent?: (text: string) => void;
 }
 
-type TabType = "inspections" | "console" | "network" | "stdio" | "page";
+type TabType = "inspections" | "console" | "network" | "stdio" | "page" | "performance";
+
+// Persists the active tab across a page reload (e.g. Performance's "Re-run" button),
+// so the dialog reopens on the same tab the user was looking at.
+const ACTIVE_TAB_KEY = "dom-inspector:context-dialog-active-tab";
 
 // Matches ContextPicker's TAB_ACCENTS palette for the shared tab ids
 // (console/network/page/stdio), plus "inspections" for this dialog's own tab.
@@ -63,6 +72,142 @@ const TAB_ACCENTS: Record<TabType, { text: string; gradient: string; badge: stri
     gradient: "from-violet-500 to-purple-500",
     badge: "bg-violet-500",
   },
+  performance: {
+    text: "text-amber-500 dark:text-amber-400",
+    gradient: "from-amber-500 to-orange-500",
+    badge: "bg-amber-500",
+  },
+};
+
+type MetricRating = "good" | "needs-improvement" | "poor";
+
+// Google Core Web Vitals thresholds (ms, except cls which is unitless)
+const METRIC_THRESHOLDS: Record<string, { good: number; poor: number }> = {
+  lcp: { good: 2500, poor: 4000 },
+  fcp: { good: 1800, poor: 3000 },
+  ttfb: { good: 800, poor: 1800 },
+  cls: { good: 0.1, poor: 0.25 },
+};
+
+function rateMetric(key: keyof typeof METRIC_THRESHOLDS, value: number | null): MetricRating | undefined {
+  if (value === null) return undefined;
+  const thresholds = METRIC_THRESHOLDS[key];
+  if (!thresholds) return undefined;
+  if (value <= thresholds.good) return "good";
+  if (value <= thresholds.poor) return "needs-improvement";
+  return "poor";
+}
+
+// Per-metric investigation checklist: concrete, likely-relevant causes and fixes, not
+// generic advice, so the agent has an actual starting point instead of guessing.
+const METRIC_PLAYBOOKS: Record<string, string> = {
+  LCP: `**Likely causes, roughly in order of frequency:**
+1. The LCP element (often an \`<img>\`) is lazy-loaded, or is discovered late because it's added via JS/CSS background-image instead of a plain \`<img src>\` in the initial HTML.
+2. No \`fetchpriority="high"\` / \`loading="eager"\` on the LCP image, or it isn't preloaded (\`<link rel="preload" as="image">\`).
+3. The image is oversized for its rendered dimensions, or served in an unoptimized format (use responsive \`srcset\`/\`sizes\`, or a modern format like WebP/AVIF).
+4. Render-blocking CSS/JS (or a client-side data fetch) delays the element from painting at all — check the network waterfall for what finishes right before the LCP timestamp.
+5. Slow TTFB pushes everything else later (see TTFB playbook if that's also bad).
+
+**Do this:**
+- Find the actual component that renders the LCP element below (search the codebase for its tag/class/id) and check which of the above applies.
+- Apply the most relevant fix(es) — don't add \`loading="eager"\` blindly if the real issue is image size or a client-side fetch delay.`,
+  FCP: `**Likely causes, roughly in order of frequency:**
+1. Render-blocking \`<script>\`/\`<link rel="stylesheet">\` in \`<head>\` before first paint — move non-critical ones to \`defer\`/\`async\` or load them after first paint.
+2. A large synchronous JS bundle that must parse/execute before anything renders — check for code-splitting opportunities on this route.
+3. Web fonts blocking text render (FOIT) — add \`font-display: swap\` (or \`optional\`) to \`@font-face\`, and preload the critical font file.
+4. Slow TTFB (see TTFB playbook if that's also bad) — FCP can't beat TTFB.
+
+**Do this:**
+- Check this page's \`<head>\`/entry bundle for blocking resources and font-loading strategy before assuming it's a JS problem.`,
+  TTFB: `**Likely causes, roughly in order of frequency:**
+1. Slow server-side data fetching (uncached DB/API calls) blocking the response — look at this route's server/data-loading code for sequential calls that could be parallelized or cached.
+2. Cold starts / no CDN caching for a cacheable response.
+3. A slow upstream dependency (auth check, session lookup, etc.) on the critical path of every request.
+
+**Do this:**
+- Trace this specific route's server-side handler/loader — don't guess at generic "add caching" advice without finding the actual slow call.`,
+  CLS: `**Likely causes, roughly in order of frequency:**
+1. Images/embeds/ads without explicit \`width\`/\`height\` (or \`aspect-ratio\`), so the browser reflows once they load — this is the #1 cause by far.
+2. Web fonts swapping in with different metrics (FOUT) shifting surrounding text — use \`font-display: optional\` or size-adjust/fallback fonts that match metrics.
+3. Content injected above existing content after load (banners, cookie notices, late-loading widgets) without reserved space.
+4. Animations that change layout properties (top/left/width/height) instead of \`transform\`.
+
+**Do this:**
+- Reproduce the shift (resize/scroll/reload while watching layout) to find which element actually moves, then fix that element specifically — CLS fixes are useless if applied to the wrong element.`,
+};
+
+/** Builds the prompt sent to the agent when the user presses "Fix with AI" on a bad performance metric. */
+function buildPerfFixPrompt(options: {
+  label: string;
+  description: string;
+  value: number;
+  unit: string;
+  rating: MetricRating;
+  url: string;
+  detail?: string;
+}): string {
+  const { label, description, value, unit, rating, url, detail } = options;
+  const playbook = METRIC_PLAYBOOKS[label];
+  return `## Performance Issue: ${label} is ${rating.replace("-", " ")}
+
+**Metric**: ${label} (${description})
+**Value**: ${value}${unit} — rated **${rating.replace("-", " ")}** against Google's Core Web Vitals thresholds
+**Page**: ${url}${detail ? `\n**Element responsible**: \`${detail}\`` : ""}
+
+${playbook ?? ""}
+
+## Your Task
+1. Find the root cause using the checklist above — don't apply a generic/superficial change (e.g. adding a loading attribute, a CSS tweak, or a config flag) without first confirming it addresses what's actually slow on THIS page.
+2. Make a real code change that fixes the confirmed root cause.
+3. Briefly explain what you changed, why it addresses the specific cause you found (not just "should help ${label}"), and what you'd expect the new ${label} value to be roughly.
+4. Note in your reply that ${label} can only be re-measured with a real page reload — ask the user to click "Re-run" in the Performance tab (or reload the page) to confirm the fix actually worked, and be ready to iterate if it didn't.`;
+}
+
+const RATING_STYLES: Record<MetricRating, string> = {
+  good: "text-emerald-500 dark:text-emerald-400",
+  "needs-improvement": "text-amber-500 dark:text-amber-400",
+  poor: "text-red-500 dark:text-red-400",
+};
+
+const PerfMetricCard: React.FC<{
+  label: string;
+  description: string;
+  value: number | null;
+  rating?: MetricRating;
+  unit?: string;
+  detail?: string;
+  onFix?: () => void;
+}> = ({ label, description, value, rating, unit = "ms", detail, onFix }) => {
+  const isBad = rating === "poor" || rating === "needs-improvement";
+  return (
+    <div className="p-3 rounded-md bg-neutral-100 dark:bg-white/[0.06] border border-neutral-200 dark:border-white/10">
+      <div className="flex items-center justify-between mb-1">
+        <div className="text-xs font-medium text-neutral-500 dark:text-neutral-400">{label}</div>
+        {rating && (
+          <span className={cn("text-[10px] font-medium uppercase tracking-wide", RATING_STYLES[rating])}>
+            {rating.replace("-", " ")}
+          </span>
+        )}
+      </div>
+      <div className={cn("text-lg font-semibold", rating ? RATING_STYLES[rating] : "text-neutral-900 dark:text-neutral-50")}>
+        {value !== null ? `${value}${unit}` : "Measuring…"}
+      </div>
+      <div className="text-[11px] text-neutral-500 dark:text-neutral-400 mt-0.5">{description}</div>
+      {detail && (
+        <div className="text-[11px] font-mono text-neutral-500 dark:text-neutral-400 mt-1 truncate">{detail}</div>
+      )}
+      {isBad && onFix && (
+        <button
+          type="button"
+          onClick={onFix}
+          className="mt-2 flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded border border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-400 hover:bg-red-500/20 transition-colors"
+        >
+          <Sparkles className="w-3 h-3" />
+          Fix with AI
+        </button>
+      )}
+    </div>
+  );
 };
 
 // Network request item component with expandable details
@@ -173,6 +318,19 @@ const NetworkRequestItem: React.FC<{
     return "text-neutral-500 dark:text-neutral-400";
   };
 
+  // Re-indents any "Body:" section that holds valid JSON via JSON.parse + JSON.stringify(..., null, 2)
+  const prettifyDetails = (raw: string): string =>
+    raw.replace(/(Body:\n)([\s\S]*?)(?=\n\n|$)/g, (match, prefix, body) => {
+      const trimmed = body.trim();
+      if (!trimmed) return match;
+      try {
+        const parsed = JSON.parse(trimmed);
+        return `${prefix}${JSON.stringify(parsed, null, 2)}`;
+      } catch {
+        return match;
+      }
+    });
+
   const renderDetails = () => {
     if (loadingDetails) {
       return (
@@ -185,12 +343,13 @@ const NetworkRequestItem: React.FC<{
 
     if (!details) return null;
 
-    let markdownContent = details;
+    const effectiveDetails = prettifyDetails(details);
+    let markdownContent = effectiveDetails;
     let sourceMapJson = null;
 
     try {
       const sourceMapPrefix = "//# sourceMappingURL=data:application/json;base64,";
-      const lines = details.split("\n");
+      const lines = effectiveDetails.split("\n");
       const sourceMapLine = lines.find((l) => l.trim().startsWith(sourceMapPrefix));
 
       if (sourceMapLine) {
@@ -206,7 +365,7 @@ ${JSON.stringify(sourceMapJson, null, 2)}
 
 **Raw Content:**
 \`\`\`
-${details}
+${effectiveDetails}
 \`\`\`
 `;
       }
@@ -214,15 +373,25 @@ ${details}
       // Ignore parsing errors
     }
 
-    // If content looks like JSON but isn't markdown formatted (doesn't start with #), wrap it in code block
-    // However, the MCP tool usually sends markdown-like headers (### Headers)
-    // If it doesn't have headers and starts with { or [, it's likely JSON.
-    if (
-      !sourceMapJson &&
-      !details.includes("###") &&
-      (details.trim().startsWith("{") || details.trim().startsWith("["))
-    ) {
-      markdownContent = `\`\`\`json\n${details}\n\`\`\``;
+    // Outside a fenced code block, markdown collapses newlines/indentation into a single
+    // flowing paragraph — always render as code block(s) so Request/Headers/Body stay on
+    // their own lines, regardless of whether the body itself is JSON.
+    if (!sourceMapJson && !effectiveDetails.includes("###")) {
+      const asFence = (text: string) => {
+        const lang = text.trim().startsWith("{") || text.trim().startsWith("[") ? "json" : "";
+        return `\`\`\`${lang}\n${text.trim()}\n\`\`\``;
+      };
+
+      // The raw text always separates Request/Response with a blank line (see interceptor.ts);
+      // split on that so each shows under its own bold label instead of one undifferentiated block.
+      const responseMarkerIndex = effectiveDetails.indexOf("\n\nResponse:");
+      if (responseMarkerIndex !== -1) {
+        const requestText = effectiveDetails.slice(0, responseMarkerIndex);
+        const responseText = effectiveDetails.slice(responseMarkerIndex + 2); // drop the leading blank line
+        markdownContent = `**Request**\n${asFence(requestText)}\n\n**Response**\n${asFence(responseText)}`;
+      } else {
+        markdownContent = asFence(effectiveDetails);
+      }
     }
 
     return (
@@ -274,8 +443,24 @@ export const ContextDialog: React.FC<ContextDialogProps> = ({
   isClientReady,
   onPlayInspection,
   onPlayAllInspections,
+  onSubmitToAgent,
 }) => {
-  const [activeTab, setActiveTab] = useState<TabType>("inspections");
+  const [activeTab, setActiveTab] = useState<TabType>(() => {
+    try {
+      const saved = sessionStorage.getItem(ACTIVE_TAB_KEY) as TabType | null;
+      return saved ?? "inspections";
+    } catch {
+      return "inspections";
+    }
+  });
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(ACTIVE_TAB_KEY, activeTab);
+    } catch {
+      // sessionStorage unavailable (private mode, etc.) — tab just won't survive a reload
+    }
+  }, [activeTab]);
   const [consoleSearch, setConsoleSearch] = useState("");
   const [networkSearch, setNetworkSearch] = useState("");
   const [stdioSearch, setStdioSearch] = useState("");
@@ -284,7 +469,7 @@ export const ContextDialog: React.FC<ContextDialogProps> = ({
   const [selectedConsoleIds, setSelectedConsoleIds] = useState<Set<number>>(new Set());
   const [selectedNetworkIds, setSelectedNetworkIds] = useState<Set<number>>(new Set());
   const [selectedStdioIds, setSelectedStdioIds] = useState<Set<number>>(new Set());
-  const pageInfo = usePageInfo();
+  const pageInfo = usePageInfo(open);
   const { consoleMessages, networkRequests, stdioMessages, loading, error, refresh } =
     useContextData(client, isClientReady);
 
@@ -394,6 +579,7 @@ export const ContextDialog: React.FC<ContextDialogProps> = ({
     { id: "console", label: "Console", count: consoleMessages.length },
     { id: "network", label: "Network", count: networkRequests.length },
     { id: "page", label: "Page" },
+    { id: "performance", label: "Performance" },
     { id: "stdio", label: "Terminal", count: stdioMessages.length },
   ];
 
@@ -733,6 +919,123 @@ export const ContextDialog: React.FC<ContextDialogProps> = ({
                       </div>
                     </div>
                   </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === "performance" && (
+            <div className="p-4 h-full overflow-auto">
+              {!pageInfo?.performance ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="w-6 h-6 animate-spin text-neutral-500 dark:text-neutral-400" />
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 text-sm text-neutral-500 dark:text-neutral-400">
+                      <Gauge className="w-4 h-4 text-primary flex-shrink-0" />
+                      Web performance metrics for this page's initial load
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => window.location.reload()}
+                      title="Reloads the page to take a fresh measurement — these metrics are tied to page navigation and can't be recomputed without one"
+                      className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md border border-neutral-200 dark:border-white/10 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-white/[0.06] transition-colors flex-shrink-0"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      Re-run
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    {(() => {
+                      const makeOnFix = (
+                        label: string,
+                        description: string,
+                        value: number | null,
+                        rating: MetricRating | undefined,
+                        unit: string,
+                        detail?: string,
+                      ) =>
+                        value !== null && rating && rating !== "good" && onSubmitToAgent
+                          ? () => {
+                              onSubmitToAgent(
+                                buildPerfFixPrompt({
+                                  label,
+                                  description,
+                                  value,
+                                  unit,
+                                  rating,
+                                  url: pageInfo.url,
+                                  detail,
+                                }),
+                              );
+                              onOpenChange(false);
+                            }
+                          : undefined;
+
+                      const lcpRating = rateMetric("lcp", pageInfo.performance.lcp);
+                      const fcpRating = rateMetric("fcp", pageInfo.performance.fcp);
+                      const ttfbRating = rateMetric("ttfb", pageInfo.performance.ttfb);
+                      const clsRating = rateMetric("cls", pageInfo.performance.cls);
+
+                      return (
+                        <>
+                          <PerfMetricCard
+                            label="LCP"
+                            description="Largest Contentful Paint"
+                            value={pageInfo.performance.lcp}
+                            rating={lcpRating}
+                            detail={pageInfo.performance.lcpElement ?? undefined}
+                            onFix={makeOnFix(
+                              "LCP",
+                              "Largest Contentful Paint",
+                              pageInfo.performance.lcp,
+                              lcpRating,
+                              "ms",
+                              pageInfo.performance.lcpElement ?? undefined,
+                            )}
+                          />
+                          <PerfMetricCard
+                            label="FCP"
+                            description="First Contentful Paint"
+                            value={pageInfo.performance.fcp}
+                            rating={fcpRating}
+                            onFix={makeOnFix("FCP", "First Contentful Paint", pageInfo.performance.fcp, fcpRating, "ms")}
+                          />
+                          <PerfMetricCard
+                            label="TTFB"
+                            description="Time to First Byte"
+                            value={pageInfo.performance.ttfb}
+                            rating={ttfbRating}
+                            onFix={makeOnFix("TTFB", "Time to First Byte", pageInfo.performance.ttfb, ttfbRating, "ms")}
+                          />
+                          <PerfMetricCard
+                            label="CLS"
+                            description="Cumulative Layout Shift"
+                            value={pageInfo.performance.cls}
+                            rating={clsRating}
+                            unit=""
+                            onFix={makeOnFix("CLS", "Cumulative Layout Shift", pageInfo.performance.cls, clsRating, "")}
+                          />
+                          <PerfMetricCard
+                            label="DOMContentLoaded"
+                            description="Navigation start → DOM ready"
+                            value={pageInfo.performance.domContentLoaded}
+                          />
+                          <PerfMetricCard
+                            label="Page Load Time"
+                            description="Navigation start → load event"
+                            value={pageInfo.performance.pageLoadTime}
+                          />
+                        </>
+                      );
+                    })()}
+                  </div>
+                  <p className="text-xs text-neutral-500 dark:text-neutral-400">
+                    Metrics reflect this page's initial navigation, not client-side route changes. Ratings use
+                    Google's Core Web Vitals thresholds where available.
+                  </p>
                 </div>
               )}
             </div>

@@ -14,6 +14,7 @@ import { type JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js";
 import { getConnectionManager } from "./mcproute-middleware";
 import { resolveNpmPackageBin } from "../utils/npm-package";
 import { substituteEnvVars } from "../utils/helpers";
+import { loadSkills, type SkillInfo } from "../utils/skills-loader";
 
 export type { AcpOptions };
 
@@ -146,6 +147,33 @@ async function loadMcpToolsV5(
   console.log(`[dom-inspector] [acp] Loaded ${Object.keys(tools).length} MCP tools`);
 
   return tools;
+}
+
+/**
+ * Build a `load_skill` tool that pulls a skill's full SKILL.md body into
+ * context on demand — load-on-demand rather than dumping every skill's
+ * full content into the system prompt up front.
+ */
+function buildLoadSkillTool(skills: SkillInfo[]) {
+  return tool({
+    description: "Load the full instructions for a named skill (see AVAILABLE SKILLS in your system prompt).",
+    inputSchema: z.object({
+      name: z.string().describe("The skill's name, exactly as listed in AVAILABLE SKILLS."),
+    }),
+    execute: async ({ name }: { name: string }) => {
+      const skill = skills.find((s) => s.name === name);
+      if (!skill) {
+        return `No skill named "${name}". Available: ${skills.map((s) => s.name).join(", ") || "(none)"}`;
+      }
+      return skill.body;
+    },
+  });
+}
+
+function formatSkillsList(skills: SkillInfo[]): string {
+  if (!skills.length) return "";
+  const list = skills.map((s) => `- **${s.name}**: ${s.description}`).join("\n");
+  return `\n\nAVAILABLE SKILLS — call load_skill({ name }) to pull one's full instructions into context before acting on a matching task:\n${list}`;
 }
 
 /**
@@ -509,6 +537,11 @@ export function setupAcpMiddleware(
       const systemPrompt =
         agent.acpSystemPrompt ?? acpOptions?.acpSystemPrompt ?? DEFAULT_SYSTEM_INSTRUCTIONS;
 
+      // Discover project skills (.claude/skills/*/SKILL.md — same format Claude
+      // Code and `npx skills add` use) and expose them via a load_skill tool,
+      // pulled in on demand rather than inlined in full up front.
+      const skills = loadSkills(cwd);
+
       // Passed as `system` (not spliced into message[0]) so it applies on every
       // turn of the conversation, not just the first — otherwise directives like
       // "ALWAYS call list_inspections FIRST" are only seen once and get lost as
@@ -519,7 +552,7 @@ ${
     ? `- **chrome_devtools**: Access Chrome DevTools for network requests, console logs, page navigation, and element interaction`
     : `- **get_network_requests**: Get browser network requests (list or details by reqid) - uses local storage
 - **get_console_messages**: Get browser console logs (list or details by msgid) - uses local storage`
-}`;
+}${formatSkillsList(skills)}`;
 
       const modelMessages = convertToModelMessages(messages);
 
@@ -531,7 +564,10 @@ ${
         messages: modelMessages,
         abortSignal: abortController.signal,
         // Use acpTools to wrap MCP tools with ACP provider dynamic tool
-        tools: acpTools(mcpTools),
+        tools: {
+          ...acpTools(mcpTools),
+          ...(skills.length ? { load_skill: buildLoadSkillTool(skills) } : {}),
+        },
         onError: (error) => {
           console.error("Error occurred while streaming text:", JSON.stringify(error, null, 2));
           if (shouldCleanupProvider) {

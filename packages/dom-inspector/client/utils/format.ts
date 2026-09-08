@@ -199,6 +199,25 @@ export function formatPageInfo(pageInfo: PageInfo): string {
 }
 
 /**
+ * Format web performance metrics (LCP, FCP, TTFB, CLS, DOMContentLoaded, page load time)
+ */
+export function formatPerformanceMetrics(pageInfo: PageInfo): string {
+  const perf = pageInfo.performance;
+  if (!perf) return "";
+
+  const fmt = (v: number | null, unit = "ms") => (v !== null ? `${v}${unit}` : "N/A");
+
+  return `## Performance Metrics
+- **LCP (Largest Contentful Paint)**: ${fmt(perf.lcp)}${perf.lcpElement ? ` (${perf.lcpElement})` : ""}
+- **FCP (First Contentful Paint)**: ${fmt(perf.fcp)}
+- **TTFB (Time to First Byte)**: ${fmt(perf.ttfb)}
+- **CLS (Cumulative Layout Shift)**: ${fmt(perf.cls, "")}
+- **DOMContentLoaded**: ${fmt(perf.domContentLoaded)}
+- **Page Load Time**: ${fmt(perf.pageLoadTime)}
+`;
+}
+
+/**
  * Format element annotations (notes) from primary and related elements
  */
 export function formatElementAnnotations(options: {

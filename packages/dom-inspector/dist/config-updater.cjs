@@ -118756,6 +118756,57 @@ function resolveNpmPackageBin(packageName) {
 }
 
 //#endregion
+//#region src/utils/skills-loader.ts
+/**
+* Minimal frontmatter parser — skills only need flat string fields
+* (name/description), so a full YAML parser is unnecessary.
+*/
+function parseFrontmatter(source) {
+	const match = source.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
+	if (!match) return { body: source };
+	const [, frontmatter, body] = match;
+	const fields = {};
+	for (const line$1 of frontmatter.split(/\r?\n/)) {
+		const fieldMatch = line$1.match(/^(\w[\w-]*):\s*(.*)$/);
+		if (!fieldMatch) continue;
+		const [, key$1, rawValue] = fieldMatch;
+		fields[key$1] = rawValue.trim().replace(/^["']|["']$/g, "");
+	}
+	return {
+		name: fields.name,
+		description: fields.description,
+		body: body.trim()
+	};
+}
+/**
+* Discover skills under `<root>/.claude/skills/*\/SKILL.md` — the same
+* format/location Claude Code and the Vercel skills CLI (`npx skills add`)
+* use, so a skill installed for either shows up here too.
+*/
+function loadSkills(root$2) {
+	const skillsDir = (0, path.join)(root$2, ".claude", "skills");
+	if (!(0, fs.existsSync)(skillsDir)) return [];
+	const skills = [];
+	for (const entry of (0, fs.readdirSync)(skillsDir)) {
+		const skillDir = (0, path.join)(skillsDir, entry);
+		if (!(0, fs.statSync)(skillDir).isDirectory()) continue;
+		const skillFile = (0, path.join)(skillDir, "SKILL.md");
+		if (!(0, fs.existsSync)(skillFile)) continue;
+		const { name: name$1, description, body } = parseFrontmatter((0, fs.readFileSync)(skillFile, "utf-8"));
+		if (!name$1 || !description) {
+			console.warn(`[dom-inspector] [skills] Skipping ${skillFile}: missing name/description`);
+			continue;
+		}
+		skills.push({
+			name: name$1,
+			description,
+			body
+		});
+	}
+	return skills;
+}
+
+//#endregion
 //#region src/middleware/acp-middleware.ts
 /**
 * Check if a command exists in the system PATH
@@ -118836,6 +118887,26 @@ async function loadMcpToolsV5(getTransport) {
 	return tools;
 }
 /**
+* Build a `load_skill` tool that pulls a skill's full SKILL.md body into
+* context on demand — load-on-demand rather than dumping every skill's
+* full content into the system prompt up front.
+*/
+function buildLoadSkillTool(skills) {
+	return (0, ai.tool)({
+		description: "Load the full instructions for a named skill (see AVAILABLE SKILLS in your system prompt).",
+		inputSchema: zod.z.object({ name: zod.z.string().describe("The skill's name, exactly as listed in AVAILABLE SKILLS.") }),
+		execute: async ({ name: name$1 }) => {
+			const skill = skills.find((s) => s.name === name$1);
+			if (!skill) return `No skill named "${name$1}". Available: ${skills.map((s) => s.name).join(", ") || "(none)"}`;
+			return skill.body;
+		}
+	});
+}
+function formatSkillsList(skills) {
+	if (!skills.length) return "";
+	return `\n\nAVAILABLE SKILLS — call load_skill({ name }) to pull one's full instructions into context before acting on a matching task:\n${skills.map((s) => `- **${s.name}**: ${s.description}`).join("\n")}`;
+}
+/**
 * Default system instructions for DomInspector - provides AI guidance
 */
 const DEFAULT_SYSTEM_INSTRUCTIONS = `# DomInspector Context
@@ -118854,6 +118925,14 @@ CODING STANDARDS — apply to every code change you make:
 - Match the file's existing conventions (naming, formatting, component patterns) rather than introducing a new style.
 - Before considering a change done, check it against the project's existing lint/format setup if one is visible (e.g. an eslint/oxlint/prettier config) — fix warnings your change introduces.
 - Don't leave unrelated code worse than you found it, but don't refactor beyond the scope of the requested change either.
+
+UI/SCREEN QUALITY — this tool is used for live web screen development, so apply these on every visual change:
+- Reuse existing design tokens (color/spacing/radius/shadow/typography variables or theme config) instead of introducing new raw values. If a value isn't in the token set, check whether that's intentional before adding a one-off.
+- Preserve responsive behavior: don't hardcode a fix that only works at the current viewport. Check the element's existing responsive classes/breakpoints and carry the same pattern into your change.
+- Preserve interactive/accessibility state that already exists on the element (focus rings, aria-* attributes, hover/active/disabled styles, semantic tag) — a visual tweak should never silently drop these.
+- When resizing, repositioning, or restyling a container, check whether its children still make sense afterward (overflow, wrapping, alignment) — don't fix one element's box at the expense of its neighbors.
+- If the user's request is ambiguous about scope (e.g. "make this bigger" could mean one element or its whole component variant), prefer the smallest change that satisfies the literal ask, and only touch a shared component/variant when the source location makes clear the edit is meant to apply everywhere.
+- After a layout/position edit, verification via verify_dom_position/verify_flex_layout is not optional — a "looks right" visual read is not sufficient, the live DOM must match the spec.
 
 CRITICAL WORKFLOW:
 Available tools:
@@ -119076,9 +119155,11 @@ function setupAcpMiddleware(middlewares, serverContext, acpOptions) {
 					if (shouldCleanupProvider) provider.cleanup();
 				}
 			});
-			const fullSystemPrompt = `${agent.acpSystemPrompt ?? acpOptions?.acpSystemPrompt ?? DEFAULT_SYSTEM_INSTRUCTIONS}
+			const systemPrompt = agent.acpSystemPrompt ?? acpOptions?.acpSystemPrompt ?? DEFAULT_SYSTEM_INSTRUCTIONS;
+			const skills = loadSkills(cwd$1);
+			const fullSystemPrompt = `${systemPrompt}
 ${isAutomated ? `- **chrome_devtools**: Access Chrome DevTools for network requests, console logs, page navigation, and element interaction` : `- **get_network_requests**: Get browser network requests (list or details by reqid) - uses local storage
-- **get_console_messages**: Get browser console logs (list or details by msgid) - uses local storage`}`;
+- **get_console_messages**: Get browser console logs (list or details by msgid) - uses local storage`}${formatSkillsList(skills)}`;
 			const modelMessages = (0, ai.convertToModelMessages)(messages);
 			const response = (0, ai.streamText)({
 				model: provider.languageModel(model, mode),
@@ -119086,7 +119167,10 @@ ${isAutomated ? `- **chrome_devtools**: Access Chrome DevTools for network reque
 				system: fullSystemPrompt,
 				messages: modelMessages,
 				abortSignal: abortController.signal,
-				tools: acpTools(mcpTools),
+				tools: {
+					...acpTools(mcpTools),
+					...skills.length ? { load_skill: buildLoadSkillTool(skills) } : {}
+				},
 				onError: (error$2) => {
 					console.error("Error occurred while streaming text:", JSON.stringify(error$2, null, 2));
 					if (shouldCleanupProvider) provider.cleanup();

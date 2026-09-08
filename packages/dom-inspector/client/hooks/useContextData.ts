@@ -193,6 +193,20 @@ function parseConsoleMessages(text: string): ConsoleMessage[] {
 }
 
 /**
+ * Matches the inspector's own internal calls (log/session plumbing), which aren't
+ * part of the inspected page's real traffic and shouldn't show up in the Network tab.
+ * Keep this in sync with the filter in client/lib/interceptor.ts.
+ */
+function isInspectorInternalUrl(url: string): boolean {
+  return (
+    url.includes("/__inspector__") ||
+    url.includes("/__mcp__") ||
+    url.includes("/api/acp/chat") ||
+    url.includes("/api/acp/init-session")
+  );
+}
+
+/**
  * Parse network requests from MCP response text
  * Format: reqid=123 METHOD url [status]
  */
@@ -206,6 +220,7 @@ function parseNetworkRequests(text: string): NetworkRequest[] {
     const match = line.match(/reqid=(\d+)\s+(GET|POST|PUT|DELETE|PATCH)\s+([^\s]+)\s+\[([^\]]+)\]/);
     if (match) {
       const [, reqid, method, url, status] = match;
+      if (isInspectorInternalUrl(url)) continue;
       requests.push({
         reqid: parseInt(reqid),
         method,

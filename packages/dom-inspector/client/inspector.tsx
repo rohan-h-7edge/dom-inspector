@@ -21,12 +21,34 @@ import ReactDOM from "react-dom/client";
 import { InspectorThemeProvider } from "./context/ThemeContext";
 import { InspectorBar } from "./components/InspectorBar";
 import { useChat } from "@ai-sdk/react";
-import { DefaultChatTransport } from "ai";
+import { DefaultChatTransport, type UIMessage } from "ai";
 import { getDevServerBaseUrl, getShowInspectorBar } from "./utils/config-loader";
 
 interface InspectorContainerProps {
   shadowRoot?: ShadowRoot;
   mountPoint?: HTMLElement;
+}
+
+// Persists the chat transcript across a page reload — the ACP session itself is
+// still torn down and recreated (see InspectorBar's pagehide cleanup), but the
+// visible history survives so the chat window doesn't come back empty.
+const CHAT_MESSAGES_KEY = "dom-inspector:chat-messages";
+
+function loadChatMessages(): UIMessage[] {
+  try {
+    const raw = sessionStorage.getItem(CHAT_MESSAGES_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveChatMessages(messages: UIMessage[]) {
+  try {
+    sessionStorage.setItem(CHAT_MESSAGES_KEY, JSON.stringify(messages));
+  } catch {
+    // sessionStorage unavailable or quota exceeded — history just won't survive a reload
+  }
 }
 
 const InspectorContainer: React.FC<InspectorContainerProps> = ({ shadowRoot, mountPoint }) => {
@@ -43,11 +65,19 @@ const InspectorContainer: React.FC<InspectorContainerProps> = ({ shadowRoot, mou
   const [selectedAgentName, setSelectedAgentName] = useState<string | null>(null);
 
   // Agent State
+  // The ACP session itself can't survive a reload (the previous session's process is
+  // explicitly torn down on pagehide in InspectorBar), but the transcript can — restore
+  // it here so the chat window doesn't come back empty after a reload.
   const { messages, sendMessage, status, stop } = useChat({
+    messages: loadChatMessages(),
     transport: new DefaultChatTransport({
       api: `${getDevServerBaseUrl()}/api/acp/chat`,
     }),
   });
+
+  useEffect(() => {
+    saveChatMessages(messages);
+  }, [messages]);
 
   const handleCancel = () => {
     stop();

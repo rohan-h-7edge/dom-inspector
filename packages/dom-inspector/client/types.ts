@@ -195,4 +195,23 @@ export interface PageInfo {
     width: number;
     height: number;
   };
+  performance?: PerformanceMetrics;
+}
+
+// Web performance metrics for the current page
+export interface PerformanceMetrics {
+  /** Largest Contentful Paint, in milliseconds (null if not yet reported by the browser) */
+  lcp: number | null;
+  /** Tag/selector of the element that produced the LCP entry, if any */
+  lcpElement: string | null;
+  /** First Contentful Paint, in milliseconds */
+  fcp: number | null;
+  /** Time to First Byte (navigation start -> first byte of the response), in milliseconds */
+  ttfb: number | null;
+  /** Time from navigation start to DOMContentLoaded, in milliseconds */
+  domContentLoaded: number | null;
+  /** Time from navigation start to the load event, in milliseconds (null if the page hasn't finished loading) */
+  pageLoadTime: number | null;
+  /** Cumulative Layout Shift score (unitless, lower is better) */
+  cls: number | null;
 }

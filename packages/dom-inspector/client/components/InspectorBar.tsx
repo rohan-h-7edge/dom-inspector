@@ -33,6 +33,14 @@ import { usePrompts } from "../hooks/usePrompts";
 import { PromptParamsDialog } from "./PromptParamsDialog";
 import { PromptsPanel } from "./PromptsPanel";
 
+// Persists whether the Full Page Context dialog is open across a page reload
+// (e.g. the Performance tab's "Re-run" button), so the user doesn't have to
+// manually reopen it and re-navigate to the same tab afterwards.
+const CONTEXT_DIALOG_OPEN_KEY = "dom-inspector:context-dialog-open";
+// Persists which InspectorBar panel (chat/inspections) was open, so it reopens the
+// same way after a reload instead of collapsing back to nothing.
+const ACTIVE_PANEL_KEY = "dom-inspector:active-panel";
+
 interface InspectorBarProps {
   isActive: boolean;
   onToggleInspector: () => void;
@@ -73,7 +81,14 @@ export const InspectorBar = ({
 }: InspectorBarProps) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [input, setInput] = useState("");
-  const [activePanel, setActivePanel] = useState<"none" | "inspections" | "chat">("none");
+  const [activePanel, setActivePanel] = useState<"none" | "inspections" | "chat">(() => {
+    try {
+      const saved = sessionStorage.getItem(ACTIVE_PANEL_KEY);
+      return saved === "inspections" || saved === "chat" ? saved : "none";
+    } catch {
+      return "none";
+    }
+  });
   const [allowHover, setAllowHover] = useState(true);
   const [isPinned, setIsPinned] = useState(false);
 
@@ -81,8 +96,30 @@ export const InspectorBar = ({
   const [availableAgents, setAvailableAgents] = useState<Agent[]>(AVAILABLE_AGENTS);
   const [isAgentSelectorOpen, setIsAgentSelectorOpen] = useState(false);
   const [configInfoAgent, setConfigInfoAgent] = useState<string | null>(null);
-  const [showContextDialog, setShowContextDialog] = useState(false);
+  const [showContextDialog, setShowContextDialog] = useState(() => {
+    try {
+      return sessionStorage.getItem(CONTEXT_DIALOG_OPEN_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
   const [showAnnotationDialog, setShowAnnotationDialog] = useState(false);
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(CONTEXT_DIALOG_OPEN_KEY, showContextDialog ? "1" : "0");
+    } catch {
+      // sessionStorage unavailable (private mode, etc.) — dialog just won't survive a reload
+    }
+  }, [showContextDialog]);
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(ACTIVE_PANEL_KEY, activePanel);
+    } catch {
+      // sessionStorage unavailable (private mode, etc.) — panel just won't survive a reload
+    }
+  }, [activePanel]);
 
   const { prompts } = usePrompts(mcpClient || null);
 
@@ -907,6 +944,11 @@ export const InspectorBar = ({
         onPlayAllInspections={() => {
           handlePlayAllInspections();
           setShowContextDialog(false);
+        }}
+        onSubmitToAgent={(text) => {
+          submitToAgent(text);
+          setShowContextDialog(false);
+          setActivePanel("chat");
         }}
       />
 

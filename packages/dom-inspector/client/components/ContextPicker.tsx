@@ -956,6 +956,26 @@ IMPORTANT: For this task, you MUST call the "context_selector" tool to return yo
                         <span className="text-neutral-500/70 dark:text-neutral-400/70">Language:</span>
                         <span className="font-mono">{pageInfo.language}</span>
                       </div>
+                      {pageInfo.performance && (
+                        <>
+                          <div className="flex gap-2">
+                            <span className="text-neutral-500/70 dark:text-neutral-400/70">LCP:</span>
+                            <span className="font-mono">
+                              {pageInfo.performance.lcp !== null
+                                ? `${pageInfo.performance.lcp}ms`
+                                : "Measuring…"}
+                            </span>
+                          </div>
+                          <div className="flex gap-2">
+                            <span className="text-neutral-500/70 dark:text-neutral-400/70">Page Load:</span>
+                            <span className="font-mono">
+                              {pageInfo.performance.pageLoadTime !== null
+                                ? `${pageInfo.performance.pageLoadTime}ms`
+                                : "Measuring…"}
+                            </span>
+                          </div>
+                        </>
+                      )}
                     </div>
                   </div>
                 </label>

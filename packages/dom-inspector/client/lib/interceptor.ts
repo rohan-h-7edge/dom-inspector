@@ -82,7 +82,8 @@ export function initInterceptors(config?: InterceptorConfig) {
     if (
       request.url.includes("/__inspector__") ||
       request.url.includes("/__mcp__") ||
-      request.url.includes("/api/acp/chat")
+      request.url.includes("/api/acp/chat") ||
+      request.url.includes("/api/acp/init-session")
     ) {
       return;
     }

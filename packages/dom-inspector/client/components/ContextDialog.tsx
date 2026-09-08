@@ -4,6 +4,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
 import { InspectionQueue, type InspectionItem } from "./InspectionQueue";
 import { useContextData } from "../hooks/useContextData";
 import { usePageInfo } from "../hooks/usePageInfo";
+import { useRouteTree } from "../hooks/useRouteTree";
+import type { RouteTreeNode } from "../lib/routeTree";
 import {
   Loader2,
   RefreshCw,
@@ -38,7 +40,7 @@ interface ContextDialogProps {
   onSubmitToAgent?: (text: string) => void;
 }
 
-type TabType = "inspections" | "console" | "network" | "stdio" | "page" | "performance";
+type TabType = "inspections" | "console" | "network" | "stdio" | "page" | "performance" | "routes";
 
 // Persists the active tab across a page reload (e.g. Performance's "Re-run" button),
 // so the dialog reopens on the same tab the user was looking at.
@@ -71,6 +73,11 @@ const TAB_ACCENTS: Record<TabType, { text: string; gradient: string; badge: stri
     text: "text-violet-500 dark:text-violet-400",
     gradient: "from-violet-500 to-purple-500",
     badge: "bg-violet-500",
+  },
+  routes: {
+    text: "text-rose-500 dark:text-rose-400",
+    gradient: "from-rose-500 to-pink-500",
+    badge: "bg-rose-500",
   },
   performance: {
     text: "text-amber-500 dark:text-amber-400",
@@ -209,6 +216,38 @@ const PerfMetricCard: React.FC<{
     </div>
   );
 };
+
+const ROUTE_KIND_STYLES: Record<RouteTreeNode["kind"], string> = {
+  route: "bg-blue-500/15 text-blue-600 dark:text-blue-300",
+  layout: "bg-violet-500/15 text-violet-600 dark:text-violet-300",
+  guard: "bg-amber-500/15 text-amber-600 dark:text-amber-300",
+};
+
+const RouteTreeItem: React.FC<{ node: RouteTreeNode; depth: number }> = ({ node, depth }) => (
+  <div>
+    <div
+      className="flex items-center gap-2 py-1 rounded hover:bg-neutral-100/50 dark:hover:bg-neutral-700/50"
+      style={{ paddingLeft: `${depth * 16 + 8}px` }}
+    >
+      <span className={cn("px-1.5 py-0.5 text-[10px] font-medium rounded uppercase tracking-wide", ROUTE_KIND_STYLES[node.kind])}>
+        {node.kind}
+      </span>
+      {node.index ? (
+        <span className="text-xs font-mono text-neutral-500 dark:text-neutral-400">(index)</span>
+      ) : node.path ? (
+        <span className="text-xs font-mono text-neutral-900 dark:text-neutral-50">{node.path}</span>
+      ) : (
+        <span className="text-xs text-neutral-400 dark:text-neutral-500 italic">(no path)</span>
+      )}
+      {node.componentName && (
+        <span className="text-xs text-neutral-500 dark:text-neutral-400">→ {node.componentName}</span>
+      )}
+    </div>
+    {node.children.map((child, i) => (
+      <RouteTreeItem key={i} node={child} depth={depth + 1} />
+    ))}
+  </div>
+);
 
 // Network request item component with expandable details
 const NetworkRequestItem: React.FC<{
@@ -470,6 +509,7 @@ export const ContextDialog: React.FC<ContextDialogProps> = ({
   const [selectedNetworkIds, setSelectedNetworkIds] = useState<Set<number>>(new Set());
   const [selectedStdioIds, setSelectedStdioIds] = useState<Set<number>>(new Set());
   const pageInfo = usePageInfo(open);
+  const routeTree = useRouteTree(open);
   const { consoleMessages, networkRequests, stdioMessages, loading, error, refresh } =
     useContextData(client, isClientReady);
 
@@ -580,6 +620,7 @@ export const ContextDialog: React.FC<ContextDialogProps> = ({
     { id: "network", label: "Network", count: networkRequests.length },
     { id: "page", label: "Page" },
     { id: "performance", label: "Performance" },
+    { id: "routes", label: "Routes", count: routeTree.tree.length || undefined },
     { id: "stdio", label: "Terminal", count: stdioMessages.length },
   ];
 
@@ -1035,6 +1076,39 @@ export const ContextDialog: React.FC<ContextDialogProps> = ({
                   <p className="text-xs text-neutral-500 dark:text-neutral-400">
                     Metrics reflect this page's initial navigation, not client-side route changes. Ratings use
                     Google's Core Web Vitals thresholds where available.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === "routes" && (
+            <div className="p-4 h-full overflow-auto">
+              {routeTree.loading ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="w-6 h-6 animate-spin text-neutral-500 dark:text-neutral-400" />
+                </div>
+              ) : !routeTree.ok ? (
+                <div className="text-center py-12">
+                  <p className="text-sm text-neutral-500 dark:text-neutral-400">
+                    {routeTree.reason ?? "Could not extract a route tree for this page."}
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 text-sm text-neutral-500 dark:text-neutral-400">
+                    <Sparkles className="w-4 h-4 text-primary flex-shrink-0" />
+                    React Router navigation tree — extracted live from this page's fiber tree
+                  </div>
+                  <div className="rounded-md border border-neutral-200 dark:border-white/10 divide-y divide-neutral-200/50 dark:divide-white/5">
+                    {routeTree.tree.map((node, i) => (
+                      <RouteTreeItem key={i} node={node} depth={0} />
+                    ))}
+                  </div>
+                  <p className="text-xs text-neutral-500 dark:text-neutral-400">
+                    Only reflects the branch currently resolved for this session (e.g. lazy-loaded route names
+                    appear only once that route has been visited). Guard vs. layout is a naming heuristic, not
+                    certain — verify before relying on it.
                   </p>
                 </div>
               )}

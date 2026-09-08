@@ -56,6 +56,7 @@ const InspectorContainer: React.FC<InspectorContainerProps> = ({ shadowRoot, mou
   const { resolvedTheme } = useInspectorTheme();
   const showInspectorBar = getShowInspectorBar();
 
+
   const [isActive, setIsActive] = useState(false);
   const [sourceInfo, setSourceInfo] = useState<InspectedElement | null>(null);
   const [screenshot, setScreenshot] = useState<string>("");

@@ -312,6 +312,7 @@ ${e.length>0?e.join(`
     --color-red-500: oklch(63.7% .237 25.331);
     --color-red-600: oklch(57.7% .245 27.325);
     --color-orange-500: oklch(70.5% .213 47.604);
+    --color-amber-300: oklch(87.9% .169 91.605);
     --color-amber-400: oklch(82.8% .189 84.429);
     --color-amber-500: oklch(76.9% .188 70.08);
     --color-amber-600: oklch(66.6% .179 58.318);
@@ -342,6 +343,7 @@ ${e.length>0?e.join(`
     --color-indigo-600: oklch(51.1% .262 276.966);
     --color-indigo-700: oklch(45.7% .24 277.023);
     --color-indigo-800: oklch(39.8% .195 277.366);
+    --color-violet-300: oklch(81.1% .111 293.571);
     --color-violet-400: oklch(70.2% .183 293.541);
     --color-violet-500: oklch(60.6% .25 292.717);
     --color-violet-600: oklch(54.1% .281 293.009);
@@ -355,6 +357,8 @@ ${e.length>0?e.join(`
     --color-fuchsia-600: oklch(59.1% .293 322.896);
     --color-fuchsia-700: oklch(51.8% .253 323.949);
     --color-pink-500: oklch(65.6% .241 354.308);
+    --color-rose-400: oklch(71.2% .194 13.428);
+    --color-rose-500: oklch(64.5% .246 16.439);
     --color-gray-400: oklch(70.7% .022 261.325);
     --color-gray-800: oklch(27.8% .033 256.848);
     --color-zinc-500: oklch(55.2% .016 285.938);
@@ -1905,6 +1909,16 @@ ${e.length>0?e.join(`
     border-bottom-width: calc(1px * calc(1 - var(--tw-divide-y-reverse)));
   }
 
+  :where(.divide-neutral-200\\/50 > :not(:last-child)) {
+    border-color: #e5e5e580;
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    :where(.divide-neutral-200\\/50 > :not(:last-child)) {
+      border-color: color-mix(in oklab, var(--color-neutral-200) 50%, transparent);
+    }
+  }
+
   .self-start {
     align-self: flex-start;
   }
@@ -2245,6 +2259,16 @@ ${e.length>0?e.join(`
     background-color: var(--color-amber-500);
   }
 
+  .bg-amber-500\\/15 {
+    background-color: #f99c0026;
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .bg-amber-500\\/15 {
+      background-color: color-mix(in oklab, var(--color-amber-500) 15%, transparent);
+    }
+  }
+
   .bg-background {
     background-color: var(--color-background);
   }
@@ -2579,6 +2603,10 @@ ${e.length>0?e.join(`
     }
   }
 
+  .bg-rose-500 {
+    background-color: var(--color-rose-500);
+  }
+
   .bg-secondary {
     background-color: var(--color-secondary);
   }
@@ -2599,6 +2627,16 @@ ${e.length>0?e.join(`
 
   .bg-violet-500 {
     background-color: var(--color-violet-500);
+  }
+
+  .bg-violet-500\\/15 {
+    background-color: #8d54ff26;
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .bg-violet-500\\/15 {
+      background-color: color-mix(in oklab, var(--color-violet-500) 15%, transparent);
+    }
   }
 
   .bg-white {
@@ -2722,6 +2760,11 @@ ${e.length>0?e.join(`
 
   .from-purple-700 {
     --tw-gradient-from: var(--color-purple-700);
+    --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
+  }
+
+  .from-rose-500 {
+    --tw-gradient-from: var(--color-rose-500);
     --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
   }
 
@@ -3188,6 +3231,10 @@ ${e.length>0?e.join(`
     color: var(--color-amber-500);
   }
 
+  .text-amber-600 {
+    color: var(--color-amber-600);
+  }
+
   .text-background {
     color: var(--color-background);
   }
@@ -3378,12 +3425,20 @@ ${e.length>0?e.join(`
     color: var(--color-red-600);
   }
 
+  .text-rose-500 {
+    color: var(--color-rose-500);
+  }
+
   .text-secondary-foreground {
     color: var(--color-secondary-foreground);
   }
 
   .text-violet-500 {
     color: var(--color-violet-500);
+  }
+
+  .text-violet-600 {
+    color: var(--color-violet-600);
   }
 
   .text-white {
@@ -4509,6 +4564,16 @@ ${e.length>0?e.join(`
     }
   }
 
+  :where(.dark\\:divide-white\\/5:where(.dark, .dark *) > :not(:last-child)) {
+    border-color: #ffffff0d;
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    :where(.dark\\:divide-white\\/5:where(.dark, .dark *) > :not(:last-child)) {
+      border-color: color-mix(in oklab, var(--color-white) 5%, transparent);
+    }
+  }
+
   .dark\\:border-input:where(.dark, .dark *) {
     border-color: var(--color-input);
   }
@@ -4697,6 +4762,10 @@ ${e.length>0?e.join(`
     }
   }
 
+  .dark\\:text-amber-300:where(.dark, .dark *) {
+    color: var(--color-amber-300);
+  }
+
   .dark\\:text-amber-400:where(.dark, .dark *) {
     color: var(--color-amber-400);
   }
@@ -4805,6 +4874,14 @@ ${e.length>0?e.join(`
 
   .dark\\:text-red-500:where(.dark, .dark *) {
     color: var(--color-red-500);
+  }
+
+  .dark\\:text-rose-400:where(.dark, .dark *) {
+    color: var(--color-rose-400);
+  }
+
+  .dark\\:text-violet-300:where(.dark, .dark *) {
+    color: var(--color-violet-300);
   }
 
   .dark\\:text-violet-400:where(.dark, .dark *) {

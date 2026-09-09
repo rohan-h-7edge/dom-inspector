@@ -23,6 +23,50 @@ import { InspectorBar } from "./components/InspectorBar";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import { getDevServerBaseUrl, getShowInspectorBar } from "./utils/config-loader";
+import { useCollabReports, type CollabReport } from "./hooks/useCollabReports";
+import { useCollabRole } from "./hooks/useCollabRole";
+import { BugMarkerLayer } from "./components/BugMarkerLayer";
+import { buildBugReportPrompt, buildCorrectionPrompt } from "./lib/collabPrompts";
+
+// CSS properties snapshotted before/after a "submit correction" edit, to
+// build a small, focused diff rather than dumping the whole computed style.
+const CORRECTION_TRACKED_PROPS = [
+  "color",
+  "background-color",
+  "font-size",
+  "font-weight",
+  "padding",
+  "margin",
+  "border",
+  "border-radius",
+  "display",
+  "width",
+  "height",
+] as const;
+
+function snapshotElementStyle(el: Element): Record<string, string> {
+  const computed = window.getComputedStyle(el);
+  const snapshot: Record<string, string> = {};
+  for (const prop of CORRECTION_TRACKED_PROPS) {
+    snapshot[prop] = computed.getPropertyValue(prop);
+  }
+  return snapshot;
+}
+
+function diffStyleSnapshots(
+  before: Record<string, string>,
+  after: Record<string, string>,
+): { before: Record<string, string>; after: Record<string, string> } | null {
+  const changedBefore: Record<string, string> = {};
+  const changedAfter: Record<string, string> = {};
+  for (const prop of CORRECTION_TRACKED_PROPS) {
+    if (before[prop] !== after[prop]) {
+      changedBefore[prop] = before[prop];
+      changedAfter[prop] = after[prop];
+    }
+  }
+  return Object.keys(changedBefore).length > 0 ? { before: changedBefore, after: changedAfter } : null;
+}
 
 interface InspectorContainerProps {
   shadowRoot?: ShadowRoot;
@@ -64,6 +108,18 @@ const InspectorContainer: React.FC<InspectorContainerProps> = ({ shadowRoot, mou
   const { inspections, setInspections } = useInspectionProgress();
   const [currentSessionInspections, setCurrentSessionInspections] = useState<InspectionItem[]>([]);
   const [selectedAgentName, setSelectedAgentName] = useState<string | null>(null);
+
+  // Collaboration: bug reports / UI corrections shared across machines.
+  const collab = useCollabReports();
+  const { role: collabRole, setRole: setCollabRole } = useCollabRole();
+  // "off" = normal inspect-and-queue-locally flow. "bug"/"correction" mean
+  // the current selection→bubble→submit cycle should post to the collab hub
+  // instead of the local inspection queue (see handleInspectionSubmit).
+  const [collabMode, setCollabMode] = useState<"off" | "bug" | "correction">("off");
+  const [resolvingReportId, setResolvingReportId] = useState<string | null>(null);
+  // "correction" mode needs a before/after style diff — captured at finalize
+  // time (before) and re-read at submit time (after any live VisBug edits).
+  const correctionBeforeRef = React.useRef<Record<string, string> | null>(null);
 
   // Agent State
   // The ACP session itself can't survive a reload (the previous session's process is
@@ -113,6 +169,7 @@ const InspectorContainer: React.FC<InspectorContainerProps> = ({ shadowRoot, mou
 
     document.body.style.cursor = newActive ? "crosshair" : "";
     setBubbleMode(null);
+    setCollabMode("off");
 
     showNotif(newActive ? "Inspector ON" : "Inspector OFF");
   }, [isActive, showNotif]);
@@ -120,8 +177,25 @@ const InspectorContainer: React.FC<InspectorContainerProps> = ({ shadowRoot, mou
   const handleBubbleClose = useCallback(() => {
     setBubbleMode(null);
     setIsActive(false);
+    setCollabMode("off");
     document.body.style.cursor = "";
   }, []);
+
+  const activateReportBug = useCallback(() => {
+    setCollabMode("bug");
+    setIsActive(true);
+    setBubbleMode(null);
+    document.body.style.cursor = "crosshair";
+    showNotif("Click an element to report a bug");
+  }, [showNotif]);
+
+  const activateCorrection = useCallback(() => {
+    setCollabMode("correction");
+    setIsActive(true);
+    setBubbleMode(null);
+    document.body.style.cursor = "crosshair";
+    showNotif("Select an element, edit it with VisBug's tools, then submit");
+  }, [showNotif]);
 
   // KISS: Simplified keyboard shortcut handling - standard React pattern
   useEffect(() => {
@@ -369,6 +443,12 @@ const InspectorContainer: React.FC<InspectorContainerProps> = ({ shadowRoot, mou
 
     setSourceInfo(info);
 
+    // "correction" mode: snapshot the element's style now, before the tester
+    // uses VisBug's own edit tools on it — diffed against a second snapshot
+    // taken at submit time (see handleInspectionSubmit).
+    correctionBeforeRef.current =
+      collabMode === "correction" && info.element ? snapshotElementStyle(info.element) : null;
+
     // Auto-save in automated mode
     if (info.automated) {
       const inspectionId = `inspection-${Date.now()}`;
@@ -455,6 +535,45 @@ const InspectorContainer: React.FC<InspectorContainerProps> = ({ shadowRoot, mou
     return () => window.removeEventListener("save-to-context", handleSaveToContext);
   }, [setInspections, showNotif]);
 
+  // Mirror collabMode onto a global the vendored VisBug metatip buttons
+  // (plain DOM code, not React) can read synchronously when they render —
+  // see vendor/visbug/utilities/apply-via-ai.js.
+  useEffect(() => {
+    (window as any).__DOM_INSPECTOR_COLLAB_MODE__ = collabMode;
+  }, [collabMode]);
+
+  // The metatip's floating buttons show a single "Report" action in place of
+  // "Apply via AI"/"Save to Context" while collabMode is active (see
+  // apply-via-ai.js) — this submits it to the collab hub the same way the
+  // normal select→bubble→submit flow does.
+  useEffect(() => {
+    const handleCollabReportFromMetatip = (e: Event) => {
+      const detail = (e as CustomEvent<{ text?: string; mode?: string }>).detail;
+      if (!detail?.text) return;
+
+      const el = e.target as Element | null;
+      const info = el ? getSourceInfo(el) : null;
+      const selector = info?.elementInfo?.domPath || "";
+
+      collab.createReport({
+        type: detail.mode === "correction" ? "correction" : "bug",
+        selector,
+        domPath: selector || null,
+        description: detail.text,
+        reporterRole: collabRole,
+      });
+
+      setCollabMode("off");
+      setIsActive(false);
+      document.body.style.cursor = "";
+      showNotif(detail.mode === "correction" ? "Correction submitted" : "Bug report submitted");
+    };
+
+    document.addEventListener("collab-report-from-metatip", handleCollabReportFromMetatip);
+    return () =>
+      document.removeEventListener("collab-report-from-metatip", handleCollabReportFromMetatip);
+  }, [collab, collabRole, showNotif]);
+
   const { selection: visbugSelection, finalizeSelection } = useVisBugInspector({
     isActive,
     isWaitingForFeedback: bubbleMode !== null,
@@ -485,6 +604,35 @@ const InspectorContainer: React.FC<InspectorContainerProps> = ({ shadowRoot, mou
     }
 
     const finalDescription = defaultDescription || description;
+
+    // Bug report / UI correction: post to the collab hub instead of the
+    // local inspection queue, then stop — none of the local-queue logic
+    // below applies to these.
+    if (collabMode !== "off") {
+      const selector = sourceInfo.elementInfo?.domPath || "";
+      const diff =
+        collabMode === "correction" && correctionBeforeRef.current && sourceInfo.element
+          ? diffStyleSnapshots(correctionBeforeRef.current, snapshotElementStyle(sourceInfo.element))
+          : null;
+
+      collab.createReport({
+        type: collabMode === "correction" ? "correction" : "bug",
+        selector,
+        domPath: selector || null,
+        description: finalDescription || null,
+        diff,
+        screenshot: screenshot || null,
+        reporterRole: collabRole,
+      });
+
+      correctionBeforeRef.current = null;
+      setCollabMode("off");
+      setBubbleMode(null);
+      setIsActive(false);
+      document.body.style.cursor = "";
+      showNotif(collabMode === "correction" ? "Correction submitted" : "Bug report submitted");
+      return;
+    }
 
     const inspectionId = `inspection-${Date.now()}`;
     const newItem: InspectionItem = {
@@ -600,9 +748,35 @@ const InspectorContainer: React.FC<InspectorContainerProps> = ({ shadowRoot, mou
               onAgentChange={setSelectedAgentName}
               selectionCount={visbugSelection.length}
               onCapture={finalizeSelection}
+              collabEnabled={collab.enabled}
+              onReportBug={activateReportBug}
+              onSubmitCorrection={activateCorrection}
+              collabRole={collabRole}
+              onCollabRoleChange={setCollabRole}
             />
           )}
         </div>
+
+        {collab.enabled && (
+          <BugMarkerLayer
+            reports={collab.reports}
+            role={collabRole}
+            resolvingId={resolvingReportId}
+            onResolveWithAI={(report: CollabReport) => {
+              setResolvingReportId(report.id);
+              collab.updateReport(report.id, { status: "in_progress" });
+              const prompt =
+                report.type === "correction"
+                  ? buildCorrectionPrompt(report, window.location.href)
+                  : buildBugReportPrompt(report, window.location.href);
+              window.dispatchEvent(new CustomEvent("collab-resolve-with-ai", { detail: { text: prompt } }));
+              setTimeout(() => setResolvingReportId(null), 1000);
+            }}
+            onMarkResolved={(report: CollabReport) => {
+              collab.updateReport(report.id, { status: "resolved", resolvedBy: collabRole });
+            }}
+          />
+        )}
 
         {notification && <Notification message={notification} />}
 

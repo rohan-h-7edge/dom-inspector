@@ -1,4 +1,4 @@
-import { a as addStdioLog, c as getDefaultPort, i as setupMcpMiddleware, l as startStandaloneServer, n as setupAcpMiddleware, o as __dirname, r as setupInspectorMiddleware, s as init_esm_shims, t as updateMcpConfigs } from "./config-updater.js";
+import { a as setupInspectorMiddleware, c as __dirname, d as startStandaloneServer, i as setupAcpMiddleware, l as init_esm_shims, n as setupCollabMiddleware, o as setupMcpMiddleware, s as addStdioLog, t as updateMcpConfigs, u as getDefaultPort } from "./config-updater.js";
 import { a as substituteEnvVars, i as stripTrailingSlash, n as isChromeDisabled, t as getPublicBaseUrl } from "./helpers.js";
 import { t as launchBrowserWithDevTools } from "./browser-launcher2.js";
 import { createRequire } from "node:module";
@@ -111,6 +111,7 @@ const createDomInspectorPlugin = (name, transformFactory) => {
 				...options,
 				defaultPrompts: options.defaultPrompts ?? true
 			});
+			setupCollabMiddleware(server);
 		};
 		const entryOption = process.env.DOM_INSPECTOR_ENTRY || options.entry;
 		const resolvedEntry = entryOption ? path.resolve(process.cwd(), entryOption) : null;
@@ -149,6 +150,8 @@ export function registerInspectorTool(_tool) {
 					const host = resolvedHost === "0.0.0.0" ? "localhost" : resolvedHost;
 					const port = resolvedPort;
 					const showInspectorBar = options.showInspectorBar ?? true;
+					const collabServerUrl = options.collabServerUrl || process.env.DOM_INSPECTOR_COLLAB_SERVER_URL || void 0;
+					const collabProjectKey = options.collabProjectKey || process.env.DOM_INSPECTOR_COLLAB_PROJECT_KEY || "default";
 					const publicBaseUrl = getPublicBaseUrl({
 						publicBaseUrl: options.publicBaseUrl,
 						host,
@@ -198,7 +201,9 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
       base: '/',
       baseUrl: ${injectedBaseUrl ? `'${injectedBaseUrl.replace(/'/g, "\\'")}'` : "undefined"},
       showInspectorBar: ${showInspectorBar},
-      disableChrome: ${chromeDisabled}
+      disableChrome: ${chromeDisabled},
+      collabServerUrl: ${collabServerUrl ? `'${collabServerUrl.replace(/'/g, "\\'")}'` : "undefined"},
+      collabProjectKey: '${collabProjectKey.replace(/'/g, "\\'")}'
     };
 
     // Dynamically load inspector script
@@ -247,6 +252,8 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
 						const port = resolvedPort;
 						const base = ctx.server?.config.base ?? "/";
 						const showInspectorBar = options.showInspectorBar ?? true;
+						const collabServerUrl = options.collabServerUrl || process.env.DOM_INSPECTOR_COLLAB_SERVER_URL || void 0;
+						const collabProjectKey = options.collabProjectKey || process.env.DOM_INSPECTOR_COLLAB_PROJECT_KEY || "default";
 						const publicBaseUrl = getPublicBaseUrl({
 							publicBaseUrl: options.publicBaseUrl,
 							host,
@@ -262,7 +269,9 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
       base: '${base}',
       baseUrl: ${publicBaseUrl ? `'${publicBaseUrl.replace(/'/g, "\\'")}'` : "undefined"},
       showInspectorBar: ${showInspectorBar},
-      disableChrome: ${chromeDisabled}
+      disableChrome: ${chromeDisabled},
+      collabServerUrl: ${collabServerUrl ? `'${collabServerUrl.replace(/'/g, "\\'")}'` : "undefined"},
+      collabProjectKey: '${collabProjectKey.replace(/'/g, "\\'")}'
     };
     var script = document.createElement('script');
     var config = window.__DOM_INSPECTOR_CONFIG__;

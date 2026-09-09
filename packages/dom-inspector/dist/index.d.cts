@@ -241,6 +241,23 @@ interface DomInspectorOptions extends McpConfigOptions, AcpOptions {
    * @example "src/main.tsx"
    */
   entry?: string;
+  /**
+   * Base URL of a running collaboration hub (a dom-inspector server instance,
+   * anywhere on the network, with `DOM_INSPECTOR_COLLAB_DB_URL` +
+   * `DOM_INSPECTOR_COLLAB_DB_AUTH_TOKEN` set) that this instance's bug
+   * reports / UI corrections should be sent to and read from. Leave unset to
+   * disable the collaboration feature entirely.
+   * Can also be set via DOM_INSPECTOR_COLLAB_SERVER_URL.
+   * @example "https://collab.my-team.example.com"
+   */
+  collabServerUrl?: string;
+  /**
+   * Groups bug reports so multiple unrelated teams/apps can share one collab
+   * hub without seeing each other's reports.
+   * Can also be set via DOM_INSPECTOR_COLLAB_PROJECT_KEY.
+   * @default "default"
+   */
+  collabProjectKey?: string;
 }
 //#endregion
 //#region src/core.d.ts

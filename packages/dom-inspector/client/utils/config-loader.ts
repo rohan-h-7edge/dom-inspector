@@ -70,6 +70,25 @@ export function getShowInspectorBar(): boolean {
 }
 
 /**
+ * Get the collaboration-hub settings (bug reports / UI corrections) from
+ * injected config. `serverUrl` is undefined when the feature is disabled
+ * (no `collabServerUrl` configured on the server).
+ */
+export function getCollabConfig(): { serverUrl: string | undefined; projectKey: string } {
+  const injectedConfig = (window as any).__DOM_INSPECTOR_CONFIG__ as
+    | {
+        collabServerUrl?: string;
+        collabProjectKey?: string;
+      }
+    | undefined;
+
+  return {
+    serverUrl: injectedConfig?.collabServerUrl,
+    projectKey: injectedConfig?.collabProjectKey || "default",
+  };
+}
+
+/**
  * Merge custom agent with default agent properties
  * If a custom agent has the same name as a default agent, fill in missing properties
  */

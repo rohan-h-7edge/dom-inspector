@@ -7,6 +7,9 @@ import { usePageInfo } from "../hooks/usePageInfo";
 import { useRouteTree } from "../hooks/useRouteTree";
 import { useRoutePerformanceTest, type RoutePerfResult } from "../hooks/useRoutePerformanceTest";
 import { joinRoutePath, isTestablePath, collectTestableRoutes, type RouteTreeNode } from "../lib/routeTree";
+import { useCollabReports, type CollabReport } from "../hooks/useCollabReports";
+import { useCollabRole } from "../hooks/useCollabRole";
+import { buildBugReportPrompt, buildCorrectionPrompt } from "../lib/collabPrompts";
 import {
   Loader2,
   RefreshCw,
@@ -22,6 +25,7 @@ import {
   RotateCcw,
   Sparkles,
   Zap,
+  Bug,
 } from "lucide-react";
 import { cn } from "../lib/utils";
 import type { NetworkRequest } from "../types";
@@ -42,7 +46,7 @@ interface ContextDialogProps {
   onSubmitToAgent?: (text: string) => void;
 }
 
-type TabType = "inspections" | "console" | "network" | "stdio" | "page" | "performance" | "routes";
+type TabType = "inspections" | "console" | "network" | "stdio" | "page" | "performance" | "routes" | "bugs";
 
 // Persists the active tab across a page reload (e.g. Performance's "Re-run" button),
 // so the dialog reopens on the same tab the user was looking at.
@@ -85,6 +89,11 @@ const TAB_ACCENTS: Record<TabType, { text: string; gradient: string; badge: stri
     text: "text-amber-500 dark:text-amber-400",
     gradient: "from-amber-500 to-orange-500",
     badge: "bg-amber-500",
+  },
+  bugs: {
+    text: "text-red-500 dark:text-red-400",
+    gradient: "from-red-600 to-rose-500",
+    badge: "bg-red-500",
   },
 };
 
@@ -670,6 +679,8 @@ export const ContextDialog: React.FC<ContextDialogProps> = ({
       protectedRoutePaths: Array.from(new Set(routes.filter((r) => r.requiresAuth).map((r) => r.path))),
     };
   }, [routeTree.tree]);
+  const collab = useCollabReports();
+  const { role: collabRole } = useCollabRole();
   const { consoleMessages, networkRequests, stdioMessages, loading, error, refresh } =
     useContextData(client, isClientReady);
 
@@ -782,6 +793,15 @@ export const ContextDialog: React.FC<ContextDialogProps> = ({
     { id: "performance", label: "Performance" },
     { id: "routes", label: "Routes", count: routeTree.tree.length || undefined },
     { id: "stdio", label: "Terminal", count: stdioMessages.length },
+    ...(collab.enabled
+      ? [
+          {
+            id: "bugs" as const,
+            label: "Bugs",
+            count: collab.reports.filter((r) => r.status !== "resolved").length || undefined,
+          },
+        ]
+      : []),
   ];
 
   return (
@@ -1318,6 +1338,89 @@ export const ContextDialog: React.FC<ContextDialogProps> = ({
                     redirects instead of measuring the intended route — if a test does get redirected anyway,
                     it's flagged rather than silently recorded under the wrong route.
                   </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === "bugs" && (
+            <div className="p-4 h-full overflow-auto">
+              {collab.reports.length === 0 ? (
+                <div className="text-center py-12">
+                  <p className="text-sm text-neutral-500 dark:text-neutral-400">
+                    No bug reports or corrections yet. Testers can submit them from the "Report a bug" / "Submit
+                    correction" buttons on the inspector bar.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 text-sm text-neutral-500 dark:text-neutral-400">
+                    <Bug className="w-4 h-4 text-primary flex-shrink-0" />
+                    Bug reports & UI corrections submitted by testers, shared across everyone pointed at this
+                    collab hub
+                  </div>
+                  <div className="rounded-md border border-neutral-200 dark:border-white/10 divide-y divide-neutral-200/50 dark:divide-white/5">
+                    {collab.reports
+                      .slice()
+                      .reverse()
+                      .map((report) => (
+                        <div key={report.id} className="p-3 space-y-1.5">
+                          <div className="flex items-center gap-2">
+                            <span
+                              className={cn(
+                                "px-1.5 py-0.5 text-[10px] font-medium rounded uppercase tracking-wide",
+                                report.type === "bug"
+                                  ? "bg-rose-500/15 text-rose-600 dark:text-rose-300"
+                                  : "bg-violet-500/15 text-violet-600 dark:text-violet-300",
+                              )}
+                            >
+                              {report.type}
+                            </span>
+                            <span className="text-[10px] text-neutral-500 dark:text-neutral-400 capitalize">
+                              {report.status.replace("_", " ")}
+                            </span>
+                            <span className="text-xs font-mono text-neutral-500 dark:text-neutral-400 truncate">
+                              {report.selector}
+                            </span>
+                            {report.status !== "resolved" && (
+                              <div className="ml-auto flex items-center gap-1.5 flex-shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    collab.updateReport(report.id, { status: "in_progress" });
+                                    const prompt =
+                                      report.type === "correction"
+                                        ? buildCorrectionPrompt(report, window.location.href)
+                                        : buildBugReportPrompt(report, window.location.href);
+                                    onSubmitToAgent?.(prompt);
+                                    onOpenChange(false);
+                                  }}
+                                  className="flex items-center gap-1 px-2 py-0.5 text-[10px] font-medium rounded border border-violet-500/30 bg-violet-500/10 text-violet-600 dark:text-violet-300 hover:bg-violet-500/20 transition-colors"
+                                >
+                                  <Sparkles className="w-3 h-3" />
+                                  Resolve with AI
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    collab.updateReport(report.id, { status: "resolved", resolvedBy: collabRole })
+                                  }
+                                  className="flex items-center gap-1 px-2 py-0.5 text-[10px] font-medium rounded border border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300 hover:bg-emerald-500/20 transition-colors"
+                                >
+                                  <Check className="w-3 h-3" />
+                                  Mark resolved
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                          {report.description && (
+                            <p className="text-xs text-neutral-700 dark:text-neutral-300 whitespace-pre-wrap">
+                              {report.description}
+                            </p>
+                          )}
+                        </div>
+                      ))}
+                  </div>
                 </div>
               )}
             </div>

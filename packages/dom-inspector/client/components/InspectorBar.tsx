@@ -13,6 +13,8 @@ import {
   Pin,
   Check,
   ImagePlus,
+  Bug,
+  Wrench,
 } from "lucide-react";
 import { Shimmer } from "../../src/components/ai-elements/shimmer";
 import { GetPromptResultSchema } from "@modelcontextprotocol/sdk/types.js";
@@ -60,6 +62,14 @@ interface InspectorBarProps {
   selectionCount?: number;
   /** Callback to finalize the current selection into an inspection */
   onCapture?: () => void;
+  /** Whether a collaboration hub is configured (bug reports / UI corrections) */
+  collabEnabled?: boolean;
+  /** Starts element selection in "report a bug" mode */
+  onReportBug?: () => void;
+  /** Starts element selection in "submit a UI correction" mode */
+  onSubmitCorrection?: () => void;
+  collabRole?: "tester" | "developer";
+  onCollabRoleChange?: (role: "tester" | "developer") => void;
 }
 
 export const InspectorBar = ({
@@ -78,6 +88,11 @@ export const InspectorBar = ({
   onAgentChange,
   selectionCount = 0,
   onCapture = () => {},
+  collabEnabled = false,
+  onReportBug = () => {},
+  onSubmitCorrection = () => {},
+  collabRole = "tester",
+  onCollabRoleChange = () => {},
 }: InspectorBarProps) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [input, setInput] = useState("");
@@ -462,6 +477,22 @@ export const InspectorBar = ({
     return () => window.removeEventListener("metatip-style-edit", onMetatipStyleEdit);
   }, [availableAgents, selectedAgent, sessionId]);
 
+  // Forwards a "Resolve with AI" click on a bug-marker popover (rendered
+  // outside this component, on the page itself) straight to the agent —
+  // mirrors the metatip-style-edit listener above.
+  useEffect(() => {
+    const onCollabResolveWithAI = (e: Event) => {
+      const detail = (e as CustomEvent<{ text?: string }>).detail;
+      if (!detail?.text) return;
+      submitToAgent(detail.text);
+      setIsExpanded(true);
+      setActivePanel("chat");
+    };
+
+    window.addEventListener("collab-resolve-with-ai", onCollabResolveWithAI);
+    return () => window.removeEventListener("collab-resolve-with-ai", onCollabResolveWithAI);
+  }, [availableAgents, selectedAgent, sessionId]);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim()) return;
@@ -726,6 +757,39 @@ export const InspectorBar = ({
               </button>
               <div className="w-px h-4 bg-border flex-shrink-0" />
             </>
+
+            {/* Collaboration: report a bug / submit a UI correction — only shown
+                when a collab hub is actually configured, to avoid clutter for
+                the majority of installs that don't use this feature. */}
+            {collabEnabled && (
+              <>
+                <button
+                  type="button"
+                  onClick={onReportBug}
+                  className="relative flex items-center justify-center w-7 h-7 rounded-full transition-colors flex-shrink-0 hover:bg-accent/50"
+                  title="Report a bug on an element"
+                >
+                  <Bug className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={onSubmitCorrection}
+                  className="relative flex items-center justify-center w-7 h-7 rounded-full transition-colors flex-shrink-0 hover:bg-accent/50"
+                  title="Edit an element live, then submit the change as a suggested correction"
+                >
+                  <Wrench className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onCollabRoleChange(collabRole === "tester" ? "developer" : "tester")}
+                  className="px-2 h-7 rounded-full text-[10px] font-medium capitalize transition-colors flex-shrink-0 hover:bg-accent/50 text-muted-foreground"
+                  title="Toggle whether you're viewing this as a tester or a developer"
+                >
+                  {collabRole}
+                </button>
+                <div className="w-px h-4 bg-border flex-shrink-0" />
+              </>
+            )}
 
             {/* Capture button: finalizes the current VisBug selection into an inspection */}
             {isActive && selectionCount > 0 && (

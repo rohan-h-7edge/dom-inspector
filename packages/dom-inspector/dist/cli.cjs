@@ -894,6 +894,10 @@ Options:
   --allowed-hosts <string>  Comma-separated list of allowed hosts (e.g. "example.com,.my-ide.com")
   --help, -h        Show this help message
 
+To act as a collaboration hub for cross-machine bug reports/UI corrections, set:
+  DOM_INSPECTOR_COLLAB_DB_URL         Turso database URL (create a free one at https://turso.tech)
+  DOM_INSPECTOR_COLLAB_DB_AUTH_TOKEN  Turso auth token
+
 Example:
   npx dom-inspector-server --port 3001 --host 0.0.0.0 --allowed-hosts my-ide.example.com
 `);
@@ -920,6 +924,8 @@ Example:
 		require_config_updater.setupMcpMiddleware(server, serverContext);
 		require_config_updater.setupAcpMiddleware(server, serverContext, {});
 		require_config_updater.setupInspectorMiddleware(server, {});
+		require_config_updater.setupCollabMiddleware(server);
+		if (require_config_updater.isCollabDbConfigured()) console.log(`[dom-inspector] 🤝 Collaboration hub active at http://${displayHost}:${actualPort}/__collab__`);
 		await require_config_updater.updateMcpConfigs(process.cwd(), baseUrl, {});
 	} catch (error) {
 		console.error("Failed to start dom-inspector server:", error);

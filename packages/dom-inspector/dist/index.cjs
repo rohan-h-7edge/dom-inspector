@@ -123,6 +123,7 @@ const createDomInspectorPlugin = (name, transformFactory) => {
 				...options,
 				defaultPrompts: options.defaultPrompts ?? true
 			});
+			require_config_updater.setupCollabMiddleware(server);
 		};
 		const entryOption = process.env.DOM_INSPECTOR_ENTRY || options.entry;
 		const resolvedEntry = entryOption ? path.default.resolve(process.cwd(), entryOption) : null;
@@ -161,6 +162,8 @@ export function registerInspectorTool(_tool) {
 					const host = resolvedHost === "0.0.0.0" ? "localhost" : resolvedHost;
 					const port = resolvedPort;
 					const showInspectorBar = options.showInspectorBar ?? true;
+					const collabServerUrl = options.collabServerUrl || process.env.DOM_INSPECTOR_COLLAB_SERVER_URL || void 0;
+					const collabProjectKey = options.collabProjectKey || process.env.DOM_INSPECTOR_COLLAB_PROJECT_KEY || "default";
 					const publicBaseUrl = require_helpers.getPublicBaseUrl({
 						publicBaseUrl: options.publicBaseUrl,
 						host,
@@ -210,7 +213,9 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
       base: '/',
       baseUrl: ${injectedBaseUrl ? `'${injectedBaseUrl.replace(/'/g, "\\'")}'` : "undefined"},
       showInspectorBar: ${showInspectorBar},
-      disableChrome: ${chromeDisabled}
+      disableChrome: ${chromeDisabled},
+      collabServerUrl: ${collabServerUrl ? `'${collabServerUrl.replace(/'/g, "\\'")}'` : "undefined"},
+      collabProjectKey: '${collabProjectKey.replace(/'/g, "\\'")}'
     };
 
     // Dynamically load inspector script
@@ -259,6 +264,8 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
 						const port = resolvedPort;
 						const base = ctx.server?.config.base ?? "/";
 						const showInspectorBar = options.showInspectorBar ?? true;
+						const collabServerUrl = options.collabServerUrl || process.env.DOM_INSPECTOR_COLLAB_SERVER_URL || void 0;
+						const collabProjectKey = options.collabProjectKey || process.env.DOM_INSPECTOR_COLLAB_PROJECT_KEY || "default";
 						const publicBaseUrl = require_helpers.getPublicBaseUrl({
 							publicBaseUrl: options.publicBaseUrl,
 							host,
@@ -274,7 +281,9 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
       base: '${base}',
       baseUrl: ${publicBaseUrl ? `'${publicBaseUrl.replace(/'/g, "\\'")}'` : "undefined"},
       showInspectorBar: ${showInspectorBar},
-      disableChrome: ${chromeDisabled}
+      disableChrome: ${chromeDisabled},
+      collabServerUrl: ${collabServerUrl ? `'${collabServerUrl.replace(/'/g, "\\'")}'` : "undefined"},
+      collabProjectKey: '${collabProjectKey.replace(/'/g, "\\'")}'
     };
     var script = document.createElement('script');
     var config = window.__DOM_INSPECTOR_CONFIG__;

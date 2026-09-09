@@ -2,3 +2,9 @@ node_modules/
 dist-electron/
 *.log
 .DS_Store
+
+# Serverless Framework build cache — embeds resolved env vars (secrets)
+# in plaintext in its generated CloudFormation templates.
+.serverless/
+dist-lambda/
+dist-hub/

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { c as getDefaultPort, i as setupMcpMiddleware, l as startStandaloneServer, n as setupAcpMiddleware, r as setupInspectorMiddleware, t as updateMcpConfigs } from "./config-updater.js";
+import { a as setupInspectorMiddleware, d as startStandaloneServer, i as setupAcpMiddleware, n as setupCollabMiddleware, o as setupMcpMiddleware, r as isCollabDbConfigured, t as updateMcpConfigs, u as getDefaultPort } from "./config-updater.js";
 import { r as isEnvTruthy, t as getPublicBaseUrl } from "./helpers.js";
 import { existsSync, readFileSync, writeFileSync } from "fs";
 import { dirname, join, resolve } from "path";
@@ -887,6 +887,10 @@ Options:
   --allowed-hosts <string>  Comma-separated list of allowed hosts (e.g. "example.com,.my-ide.com")
   --help, -h        Show this help message
 
+To act as a collaboration hub for cross-machine bug reports/UI corrections, set:
+  DOM_INSPECTOR_COLLAB_DB_URL         Turso database URL (create a free one at https://turso.tech)
+  DOM_INSPECTOR_COLLAB_DB_AUTH_TOKEN  Turso auth token
+
 Example:
   npx dom-inspector-server --port 3001 --host 0.0.0.0 --allowed-hosts my-ide.example.com
 `);
@@ -913,6 +917,8 @@ Example:
 		setupMcpMiddleware(server, serverContext);
 		setupAcpMiddleware(server, serverContext, {});
 		setupInspectorMiddleware(server, {});
+		setupCollabMiddleware(server);
+		if (isCollabDbConfigured()) console.log(`[dom-inspector] 🤝 Collaboration hub active at http://${displayHost}:${actualPort}/__collab__`);
 		await updateMcpConfigs(process.cwd(), baseUrl, {});
 	} catch (error) {
 		console.error("Failed to start dom-inspector server:", error);

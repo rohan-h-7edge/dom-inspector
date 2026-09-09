@@ -2,6 +2,8 @@ import { startStandaloneServer, getDefaultPort } from "../../utils/standalone-se
 import { setupMcpMiddleware } from "../../middleware/mcproute-middleware";
 import { setupInspectorMiddleware } from "../../middleware/inspector-middleware";
 import { setupAcpMiddleware } from "../../middleware/acp-middleware";
+import { setupCollabMiddleware } from "../../middleware/collab-middleware";
+import { isCollabDbConfigured } from "../../collab/store";
 import { updateMcpConfigs } from "../../utils/config-updater";
 import { getPublicBaseUrl, isEnvTruthy } from "../../utils/helpers";
 import type { Connect } from "vite";
@@ -49,6 +51,10 @@ Options:
   --allowed-hosts <string>  Comma-separated list of allowed hosts (e.g. "example.com,.my-ide.com")
   --help, -h        Show this help message
 
+To act as a collaboration hub for cross-machine bug reports/UI corrections, set:
+  DOM_INSPECTOR_COLLAB_DB_URL         Turso database URL (create a free one at https://turso.tech)
+  DOM_INSPECTOR_COLLAB_DB_AUTH_TOKEN  Turso auth token
+
 Example:
   npx dom-inspector-server --port 3001 --host 0.0.0.0 --allowed-hosts my-ide.example.com
 `);
@@ -82,6 +88,12 @@ Example:
     setupMcpMiddleware(server as unknown as Connect.Server, serverContext);
     setupAcpMiddleware(server as unknown as Connect.Server, serverContext, {});
     setupInspectorMiddleware(server as unknown as Connect.Server, {});
+    setupCollabMiddleware(server as unknown as Connect.Server);
+    if (isCollabDbConfigured()) {
+      console.log(
+        `[dom-inspector] 🤝 Collaboration hub active at http://${displayHost}:${actualPort}/__collab__`,
+      );
+    }
 
     // Auto-update MCP configs
     const root = process.cwd();

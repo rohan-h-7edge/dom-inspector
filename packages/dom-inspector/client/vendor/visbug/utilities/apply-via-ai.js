@@ -122,6 +122,34 @@ export const showApplyViaAiButton = (anchorEl, text) => {
   const playTop = Math.min(window.innerHeight - 40, rect.bottom + 6)
   const saveTop = Math.min(window.innerHeight - 76, rect.bottom + 42)
 
+  // When the inspector bar's "Report a bug" / "Submit correction" mode is
+  // active (see inspector.tsx, which mirrors collabMode onto this global),
+  // reuse the existing "Save to Context" button rather than adding a new one
+  // — one click both queues it locally (as before) and posts it to the
+  // collab hub, where it shows up as an on-page marker for anyone else
+  // pointed at the same hub.
+  const collabMode = typeof window !== 'undefined' ? window.__DOM_INSPECTOR_COLLAB_MODE__ : 'off'
+  if (collabMode === 'bug' || collabMode === 'correction') {
+    const saveBtn = makeFloatingButton('💾 Save to Context', '#6366f1', rect, 300, playTop)
+
+    activeSaveAction = () => {
+      anchorEl.dispatchEvent(new CustomEvent('save-to-context', {
+        bubbles: true,
+        detail: { sourceInfo: getSourceInfo(anchorEl), description: text },
+      }))
+      anchorEl.dispatchEvent(new CustomEvent('collab-report-from-metatip', {
+        bubbles: true,
+        detail: { text, mode: collabMode },
+      }))
+      removeApplyViaAiButton()
+    }
+
+    document.body.appendChild(saveBtn)
+    activeSaveButton = saveBtn
+    dismissTimeout = setTimeout(removeApplyViaAiButton, 10000)
+    return
+  }
+
   const playBtn = makeFloatingButton('▶ Apply via AI', '#22c55e', rect, 140, playTop)
   const saveBtn = makeFloatingButton('💾 Save to Context', '#6366f1', rect, 300, saveTop)
 

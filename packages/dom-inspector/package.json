@@ -78,6 +78,8 @@
     "build:client": "tsdown --config tsdown.client.config.ts",
     "build:react": "tsdown --config tsdown.react.config.ts",
     "build:mcp-app": "tsdown --config tsdown.mcp-app.config.ts",
+    "build:hub": "esbuild src/collab/hub-entry.ts --bundle --platform=node --target=node20 --format=esm --outfile=dist-hub/index.js",
+    "build:lambda": "esbuild src/collab/lambda-handler.ts --bundle --platform=node --target=node20 --format=cjs --outfile=dist-lambda/index.js",
     "dev:plugin": "tsdown --watch",
     "dev:client": "tsdown --config tsdown.client.config.ts --watch",
     "lint": "oxlint .",

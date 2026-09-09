@@ -4,6 +4,7 @@ import type { Connect } from "vite";
 import { setupMcpMiddleware } from "../middleware/mcproute-middleware";
 import { setupInspectorMiddleware } from "../middleware/inspector-middleware";
 import { setupAcpMiddleware } from "../middleware/acp-middleware";
+import { setupCollabMiddleware } from "../middleware/collab-middleware";
 import { type McpConfigOptions, updateMcpConfigs } from "./config-updater";
 import { launchBrowserWithDevTools } from "./browser-launcher";
 import {
@@ -147,6 +148,25 @@ export interface DomInspectorOptions extends McpConfigOptions, AcpOptions {
    * @example "src/main.tsx"
    */
   entry?: string;
+
+  /**
+   * Base URL of a running collaboration hub (a dom-inspector server instance,
+   * anywhere on the network, with `DOM_INSPECTOR_COLLAB_DB_URL` +
+   * `DOM_INSPECTOR_COLLAB_DB_AUTH_TOKEN` set) that this instance's bug
+   * reports / UI corrections should be sent to and read from. Leave unset to
+   * disable the collaboration feature entirely.
+   * Can also be set via DOM_INSPECTOR_COLLAB_SERVER_URL.
+   * @example "https://collab.my-team.example.com"
+   */
+  collabServerUrl?: string;
+
+  /**
+   * Groups bug reports so multiple unrelated teams/apps can share one collab
+   * hub without seeing each other's reports.
+   * Can also be set via DOM_INSPECTOR_COLLAB_PROJECT_KEY.
+   * @default "default"
+   */
+  collabProjectKey?: string;
 }
 
 export type TransformFunction = (
@@ -266,6 +286,8 @@ export const createDomInspectorPlugin = (
         ...options,
         defaultPrompts: options.defaultPrompts ?? true,
       });
+
+      setupCollabMiddleware(server as unknown as Connect.Server);
     };
 
     // Resolve entry file for auto-injection
@@ -329,6 +351,10 @@ export function registerInspectorTool(_tool) {
           const host = resolvedHost === "0.0.0.0" ? "localhost" : resolvedHost;
           const port = resolvedPort;
           const showInspectorBar = options.showInspectorBar ?? true;
+          const collabServerUrl =
+            options.collabServerUrl || process.env.DOM_INSPECTOR_COLLAB_SERVER_URL || undefined;
+          const collabProjectKey =
+            options.collabProjectKey || process.env.DOM_INSPECTOR_COLLAB_PROJECT_KEY || "default";
           // Use helper to respect Env > Option priority
           const publicBaseUrl = getPublicBaseUrl({
             publicBaseUrl: options.publicBaseUrl,
@@ -382,7 +408,9 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
       base: '/',
       baseUrl: ${injectedBaseUrl ? `'${injectedBaseUrl.replace(/'/g, "\\'")}'` : "undefined"},
       showInspectorBar: ${showInspectorBar},
-      disableChrome: ${chromeDisabled}
+      disableChrome: ${chromeDisabled},
+      collabServerUrl: ${collabServerUrl ? `'${collabServerUrl.replace(/'/g, "\\'")}'` : "undefined"},
+      collabProjectKey: '${collabProjectKey.replace(/'/g, "\\'")}'
     };
 
     // Dynamically load inspector script
@@ -438,6 +466,10 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
             const port = resolvedPort;
             const base = ctx.server?.config.base ?? "/";
             const showInspectorBar = options.showInspectorBar ?? true;
+            const collabServerUrl =
+              options.collabServerUrl || process.env.DOM_INSPECTOR_COLLAB_SERVER_URL || undefined;
+            const collabProjectKey =
+              options.collabProjectKey || process.env.DOM_INSPECTOR_COLLAB_PROJECT_KEY || "default";
             const publicBaseUrl = getPublicBaseUrl({
               publicBaseUrl: options.publicBaseUrl,
               host,
@@ -456,7 +488,9 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
       base: '${base}',
       baseUrl: ${publicBaseUrl ? `'${publicBaseUrl.replace(/'/g, "\\'")}'` : "undefined"},
       showInspectorBar: ${showInspectorBar},
-      disableChrome: ${chromeDisabled}
+      disableChrome: ${chromeDisabled},
+      collabServerUrl: ${collabServerUrl ? `'${collabServerUrl.replace(/'/g, "\\'")}'` : "undefined"},
+      collabProjectKey: '${collabProjectKey.replace(/'/g, "\\'")}'
     };
     var script = document.createElement('script');
     var config = window.__DOM_INSPECTOR_CONFIG__;

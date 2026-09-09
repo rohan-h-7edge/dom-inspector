@@ -177,6 +177,54 @@ export interface RouteTreeExtractionResult {
   reason?: string;
 }
 
+/** Joins a parent's resolved base path with a route's own `path` prop, following
+ * React Router v6 path-joining rules: a leading "/" makes the segment absolute
+ * (ignoring the parent), otherwise it's appended relative to the parent. Layout/
+ * guard/index nodes pass `segment: null` and simply keep the parent's path. */
+export function joinRoutePath(basePath: string, segment: string | null): string {
+  if (!segment) return basePath || "/";
+  if (segment.startsWith("/")) return segment;
+  const base = basePath === "/" ? "" : basePath;
+  return `${base}/${segment}`.replace(/\/{2,}/g, "/");
+}
+
+/** Whether a resolved path can be navigated to directly for a performance test —
+ * excludes dynamic segments (":id") and catch-alls ("*") since there's no real
+ * param value to substitute here. */
+export function isTestablePath(path: string): boolean {
+  return !path.split("/").some((segment) => segment.startsWith(":") || segment === "*");
+}
+
+export interface TestableRoute {
+  path: string;
+  componentName: string | null;
+  /** True if this route sits under a "guard" node (heuristic — see
+   * classifyRoute/GUARD_NAME_PATTERN) — i.e. it likely needs an authenticated
+   * session to reach, and testing it while logged out will just redirect
+   * somewhere else instead of measuring the intended route. */
+  requiresAuth: boolean;
+}
+
+/** Flattens the tree into the concrete, navigable routes it contains (for "test
+ * all routes"). Paths may repeat (e.g. an index route resolves to its parent's
+ * path) — callers that navigate through the list should dedupe first. */
+export function collectTestableRoutes(
+  tree: RouteTreeNode[],
+  basePath = "",
+  underGuard = false,
+): TestableRoute[] {
+  const out: TestableRoute[] = [];
+  for (const node of tree) {
+    const fullPath = joinRoutePath(basePath, node.path);
+    const guarded = underGuard || node.kind === "guard";
+    if ((node.path !== null || node.index) && isTestablePath(fullPath)) {
+      out.push({ path: fullPath, componentName: node.componentName, requiresAuth: guarded });
+    }
+    out.push(...collectTestableRoutes(node.children, fullPath, guarded));
+  }
+  return out;
+}
+
 /** Entry point: walks the page's fiber tree to find <Routes> and returns its
  * resolved route tree. Dev-only proof of concept — no persistence, no UI. */
 export function extractReactRouterTree(): RouteTreeExtractionResult {

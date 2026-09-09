@@ -5,7 +5,8 @@ import { InspectionQueue, type InspectionItem } from "./InspectionQueue";
 import { useContextData } from "../hooks/useContextData";
 import { usePageInfo } from "../hooks/usePageInfo";
 import { useRouteTree } from "../hooks/useRouteTree";
-import type { RouteTreeNode } from "../lib/routeTree";
+import { useRoutePerformanceTest, type RoutePerfResult } from "../hooks/useRoutePerformanceTest";
+import { joinRoutePath, isTestablePath, collectTestableRoutes, type RouteTreeNode } from "../lib/routeTree";
 import {
   Loader2,
   RefreshCw,
@@ -20,6 +21,7 @@ import {
   Gauge,
   RotateCcw,
   Sparkles,
+  Zap,
 } from "lucide-react";
 import { cn } from "../lib/utils";
 import type { NetworkRequest } from "../types";
@@ -223,31 +225,181 @@ const ROUTE_KIND_STYLES: Record<RouteTreeNode["kind"], string> = {
   guard: "bg-amber-500/15 text-amber-600 dark:text-amber-300",
 };
 
-const RouteTreeItem: React.FC<{ node: RouteTreeNode; depth: number }> = ({ node, depth }) => (
-  <div>
-    <div
-      className="flex items-center gap-2 py-1 rounded hover:bg-neutral-100/50 dark:hover:bg-neutral-700/50"
-      style={{ paddingLeft: `${depth * 16 + 8}px` }}
-    >
-      <span className={cn("px-1.5 py-0.5 text-[10px] font-medium rounded uppercase tracking-wide", ROUTE_KIND_STYLES[node.kind])}>
-        {node.kind}
-      </span>
-      {node.index ? (
-        <span className="text-xs font-mono text-neutral-500 dark:text-neutral-400">(index)</span>
-      ) : node.path ? (
-        <span className="text-xs font-mono text-neutral-900 dark:text-neutral-50">{node.path}</span>
-      ) : (
-        <span className="text-xs text-neutral-400 dark:text-neutral-500 italic">(no path)</span>
+const RouteTreeItem: React.FC<{
+  node: RouteTreeNode;
+  depth: number;
+  basePath: string;
+  /** True if an ancestor node was classified as a "guard" — passed down so
+   * every descendant knows it likely needs an authenticated session. */
+  underGuard: boolean;
+  results: Record<string, RoutePerfResult>;
+  onRunTest: (path: string) => void;
+  onSubmitToAgent?: (text: string) => void;
+  onOpenChange: (open: boolean) => void;
+}> = ({ node, depth, basePath, underGuard, results, onRunTest, onSubmitToAgent, onOpenChange }) => {
+  const fullPath = joinRoutePath(basePath, node.path);
+  const guarded = underGuard || node.kind === "guard";
+  const testable = (node.path !== null || node.index) && isTestablePath(fullPath);
+  const result = testable ? results[fullPath] : undefined;
+
+  const makeOnFix = (
+    label: string,
+    description: string,
+    value: number | null,
+    rating: MetricRating | undefined,
+    unit: string,
+    detail?: string,
+  ) =>
+    value !== null && rating && rating !== "good" && onSubmitToAgent
+      ? () => {
+          onSubmitToAgent(
+            buildPerfFixPrompt({
+              label,
+              description,
+              value,
+              unit,
+              rating,
+              url: `${window.location.origin}${fullPath}`,
+              detail,
+            }),
+          );
+          onOpenChange(false);
+        }
+      : undefined;
+
+  return (
+    <div>
+      <div
+        className="flex items-center gap-2 py-1 rounded hover:bg-neutral-100/50 dark:hover:bg-neutral-700/50"
+        style={{ paddingLeft: `${depth * 16 + 8}px` }}
+      >
+        <span className={cn("px-1.5 py-0.5 text-[10px] font-medium rounded uppercase tracking-wide", ROUTE_KIND_STYLES[node.kind])}>
+          {node.kind}
+        </span>
+        {node.index ? (
+          <span className="text-xs font-mono text-neutral-500 dark:text-neutral-400">(index)</span>
+        ) : node.path ? (
+          <span className="text-xs font-mono text-neutral-900 dark:text-neutral-50">{node.path}</span>
+        ) : (
+          <span className="text-xs text-neutral-400 dark:text-neutral-500 italic">(no path)</span>
+        )}
+        {node.componentName && (
+          <span className="text-xs text-neutral-500 dark:text-neutral-400">→ {node.componentName}</span>
+        )}
+        {testable && guarded && (
+          <span
+            className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-neutral-500/15 text-neutral-600 dark:text-neutral-300"
+            title="Under a guard node in the tree — likely needs an authenticated session to reach without redirecting"
+          >
+            requires login
+          </span>
+        )}
+        {testable && (
+          <button
+            type="button"
+            onClick={() => onRunTest(fullPath)}
+            disabled={result?.status === "running"}
+            title={`Reload into ${fullPath} and measure real performance metrics, same as the Performance tab's Re-run`}
+            className="ml-auto flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium rounded border border-neutral-200 dark:border-white/10 text-neutral-600 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-white/10 transition-colors disabled:opacity-50 flex-shrink-0"
+          >
+            {result?.status === "running" ? (
+              <Loader2 className="w-3 h-3 animate-spin" />
+            ) : (
+              <Zap className="w-3 h-3" />
+            )}
+            Test
+          </button>
+        )}
+      </div>
+
+      {result?.status === "redirected" && (
+        <div style={{ paddingLeft: `${depth * 16 + 24}px` }} className="pr-2 pb-3">
+          <div className="flex items-start gap-2 p-2.5 rounded-md bg-amber-500/10 border border-amber-500/30 text-xs text-amber-700 dark:text-amber-300">
+            <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+            <span>
+              Redirected to <code className="font-mono">{result.redirectedTo}</code> instead of{" "}
+              <code className="font-mono">{fullPath}</code> — this route probably needs
+              {guarded ? " you to be logged in" : " a different session state"} to reach directly. Metrics for the
+              intended route weren't recorded; log in/out as needed and retest.
+            </span>
+          </div>
+        </div>
       )}
-      {node.componentName && (
-        <span className="text-xs text-neutral-500 dark:text-neutral-400">→ {node.componentName}</span>
+
+      {result?.status === "done" && result.metrics && (
+        <div style={{ paddingLeft: `${depth * 16 + 24}px` }} className="pr-2 pb-3">
+          <div className="grid grid-cols-3 gap-2">
+            {(() => {
+              const m = result.metrics!;
+              const lcpRating = rateMetric("lcp", m.lcp);
+              const fcpRating = rateMetric("fcp", m.fcp);
+              const ttfbRating = rateMetric("ttfb", m.ttfb);
+              const clsRating = rateMetric("cls", m.cls);
+              return (
+                <>
+                  <PerfMetricCard
+                    label="LCP"
+                    description="Largest Contentful Paint"
+                    value={m.lcp}
+                    rating={lcpRating}
+                    detail={m.lcpElement ?? undefined}
+                    onFix={makeOnFix("LCP", "Largest Contentful Paint", m.lcp, lcpRating, "ms", m.lcpElement ?? undefined)}
+                  />
+                  <PerfMetricCard
+                    label="FCP"
+                    description="First Contentful Paint"
+                    value={m.fcp}
+                    rating={fcpRating}
+                    onFix={makeOnFix("FCP", "First Contentful Paint", m.fcp, fcpRating, "ms")}
+                  />
+                  <PerfMetricCard
+                    label="TTFB"
+                    description="Time to First Byte"
+                    value={m.ttfb}
+                    rating={ttfbRating}
+                    onFix={makeOnFix("TTFB", "Time to First Byte", m.ttfb, ttfbRating, "ms")}
+                  />
+                  <PerfMetricCard
+                    label="CLS"
+                    description="Cumulative Layout Shift"
+                    value={m.cls}
+                    rating={clsRating}
+                    unit=""
+                    onFix={makeOnFix("CLS", "Cumulative Layout Shift", m.cls, clsRating, "")}
+                  />
+                  <PerfMetricCard
+                    label="DOMContentLoaded"
+                    description="Navigation start → DOM ready"
+                    value={m.domContentLoaded}
+                  />
+                  <PerfMetricCard label="Page Load Time" description="Navigation start → load event" value={m.pageLoadTime} />
+                </>
+              );
+            })()}
+          </div>
+          <p className="text-[11px] text-neutral-500 dark:text-neutral-400 mt-2">
+            Measured via a real page reload into this route, just like the Performance tab's "Re-run" button —
+            these are fresh, correct values for this specific route, not fallbacks from the original page load.
+          </p>
+        </div>
       )}
+
+      {node.children.map((child, i) => (
+        <RouteTreeItem
+          key={i}
+          node={child}
+          depth={depth + 1}
+          basePath={fullPath}
+          underGuard={guarded}
+          results={results}
+          onRunTest={onRunTest}
+          onSubmitToAgent={onSubmitToAgent}
+          onOpenChange={onOpenChange}
+        />
+      ))}
     </div>
-    {node.children.map((child, i) => (
-      <RouteTreeItem key={i} node={child} depth={depth + 1} />
-    ))}
-  </div>
-);
+  );
+};
 
 // Network request item component with expandable details
 const NetworkRequestItem: React.FC<{
@@ -510,6 +662,14 @@ export const ContextDialog: React.FC<ContextDialogProps> = ({
   const [selectedStdioIds, setSelectedStdioIds] = useState<Set<number>>(new Set());
   const pageInfo = usePageInfo(open);
   const routeTree = useRouteTree(open);
+  const routePerf = useRoutePerformanceTest();
+  const { publicRoutePaths, protectedRoutePaths } = React.useMemo(() => {
+    const routes = collectTestableRoutes(routeTree.tree);
+    return {
+      publicRoutePaths: Array.from(new Set(routes.filter((r) => !r.requiresAuth).map((r) => r.path))),
+      protectedRoutePaths: Array.from(new Set(routes.filter((r) => r.requiresAuth).map((r) => r.path))),
+    };
+  }, [routeTree.tree]);
   const { consoleMessages, networkRequests, stdioMessages, loading, error, refresh } =
     useContextData(client, isClientReady);
 
@@ -1096,19 +1256,67 @@ export const ContextDialog: React.FC<ContextDialogProps> = ({
                 </div>
               ) : (
                 <div className="space-y-3">
-                  <div className="flex items-center gap-2 text-sm text-neutral-500 dark:text-neutral-400">
-                    <Sparkles className="w-4 h-4 text-primary flex-shrink-0" />
-                    React Router navigation tree — extracted live from this page's fiber tree
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <div className="flex items-center gap-2 text-sm text-neutral-500 dark:text-neutral-400">
+                      <Sparkles className="w-4 h-4 text-primary flex-shrink-0" />
+                      React Router navigation tree — extracted live from this page's fiber tree
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => routePerf.runAll(publicRoutePaths)}
+                        disabled={routePerf.isRunningAll || publicRoutePaths.length === 0}
+                        title="Reload into every public route (no login required), one at a time, and measure real performance metrics — returns to the current page when done. Run this while logged OUT."
+                        className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md border border-neutral-200 dark:border-white/10 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-white/[0.06] transition-colors disabled:opacity-50"
+                      >
+                        {routePerf.isRunningAll ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <Zap className="w-3.5 h-3.5" />
+                        )}
+                        Test Public Routes
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => routePerf.runAll(protectedRoutePaths)}
+                        disabled={routePerf.isRunningAll || protectedRoutePaths.length === 0}
+                        title="Reload into every route that needs an authenticated session, one at a time — make sure you're logged IN first, or these will just redirect to login."
+                        className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md border border-neutral-200 dark:border-white/10 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-white/[0.06] transition-colors disabled:opacity-50"
+                      >
+                        {routePerf.isRunningAll ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <Zap className="w-3.5 h-3.5" />
+                        )}
+                        Test Protected Routes ({protectedRoutePaths.length})
+                      </button>
+                    </div>
                   </div>
                   <div className="rounded-md border border-neutral-200 dark:border-white/10 divide-y divide-neutral-200/50 dark:divide-white/5">
                     {routeTree.tree.map((node, i) => (
-                      <RouteTreeItem key={i} node={node} depth={0} />
+                      <RouteTreeItem
+                        key={i}
+                        node={node}
+                        depth={0}
+                        basePath=""
+                        underGuard={false}
+                        results={routePerf.results}
+                        onRunTest={routePerf.runTest}
+                        onSubmitToAgent={onSubmitToAgent}
+                        onOpenChange={onOpenChange}
+                      />
                     ))}
                   </div>
                   <p className="text-xs text-neutral-500 dark:text-neutral-400">
                     Only reflects the branch currently resolved for this session (e.g. lazy-loaded route names
                     appear only once that route has been visited). Guard vs. layout is a naming heuristic, not
-                    certain — verify before relying on it.
+                    certain — verify before relying on it. "Test" reloads the page into that route (like the
+                    Performance tab's "Re-run" button) to get real, fresh metrics rather than stale/duplicated
+                    values from the original load. Routes with dynamic segments (<code>:id</code>) or catch-alls
+                    aren't directly testable since there's no real param value to substitute. Routes marked
+                    "requires login" are grouped separately since testing them in the wrong auth state just
+                    redirects instead of measuring the intended route — if a test does get redirected anyway,
+                    it's flagged rather than silently recorded under the wrong route.
                   </p>
                 </div>
               )}

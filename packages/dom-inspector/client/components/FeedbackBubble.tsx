@@ -10,7 +10,7 @@ import {
   DialogTitle,
 } from "./ui/dialog";
 import { Button } from "./ui/button";
-import { Loader2, CheckCircle2, XCircle, Copy, Sparkles } from "lucide-react";
+import { Loader2, CheckCircle2, XCircle, Copy, Sparkles, Bug } from "lucide-react";
 import { PlanProgress } from "./PlanProgress";
 import { usePlanProgress } from "../hooks/usePlanProgress";
 import { ContextPicker, type SelectedContext } from "./ContextPicker";
@@ -31,6 +31,9 @@ interface FeedbackBubbleProps {
   isClientReady?: boolean;
   /** Currently selected agent name */
   selectedAgent?: string;
+  /** Set when this is a collab bug report / correction rather than an AI
+   * request — swaps the AI-facing copy and hides the AI-only actions. */
+  reportType?: "bug" | "correction";
 }
 
 export const FeedbackBubble: React.FC<FeedbackBubbleProps> = ({
@@ -43,6 +46,7 @@ export const FeedbackBubble: React.FC<FeedbackBubbleProps> = ({
   client = null,
   isClientReady = false,
   selectedAgent,
+  reportType,
 }) => {
   const plan = usePlanProgress();
   const [feedback, setFeedback] = useState("");
@@ -238,7 +242,11 @@ export const FeedbackBubble: React.FC<FeedbackBubbleProps> = ({
           ? "Success"
           : mode === "loading"
             ? "Processing..."
-            : "Tell the AI";
+            : reportType === "correction"
+              ? "Submit a correction"
+              : reportType === "bug"
+                ? "Report a bug"
+                : "Tell the AI";
 
   const icon =
     mode === "success" || (mode === "loading" && allStepsCompleted) ? (
@@ -247,6 +255,10 @@ export const FeedbackBubble: React.FC<FeedbackBubbleProps> = ({
       <XCircle className="h-5 w-5 text-red-600 dark:text-red-500" />
     ) : mode === "loading" ? (
       <Loader2 className="h-5 w-5 animate-spin text-blue-600 dark:text-blue-500" />
+    ) : reportType ? (
+      <span className="flex items-center justify-center h-6 w-6 rounded-full bg-rose-500 shadow-sm shadow-rose-500/40">
+        <Bug className="h-3 w-3 text-white" />
+      </span>
     ) : (
       <span className="flex items-center justify-center h-6 w-6 rounded-full bg-linear-to-br from-violet-600 via-fuchsia-500 to-pink-500 shadow-sm shadow-fuchsia-500/40">
         <Sparkles className="h-3 w-3 text-white" />
@@ -263,7 +275,11 @@ export const FeedbackBubble: React.FC<FeedbackBubbleProps> = ({
           </DialogTitle>
           <DialogDescription className="text-xs text-neutral-500 dark:text-neutral-400">
             {mode === "input" ? (
-              "Describe what you want to fix or improve, then add context below"
+              reportType ? (
+                "Explain what's wrong and what you expected — developers see this on the page"
+              ) : (
+                "Describe what you want to fix or improve, then add context below"
+              )
             ) : (
               <span className="font-mono">
                 {sourceInfo.component} • {sourceInfo.file}:{sourceInfo.line}:{sourceInfo.column}
@@ -279,7 +295,11 @@ export const FeedbackBubble: React.FC<FeedbackBubbleProps> = ({
               value={feedback}
               onChange={(e) => setFeedback(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="What should the AI do with this?"
+              placeholder={
+                reportType
+                  ? "What's wrong here? What did you expect instead?"
+                  : "What should the AI do with this?"
+              }
               className="w-full min-h-[120px] px-4 py-3 rounded-lg border border-neutral-300 dark:border-white/15 bg-white dark:bg-white/5 text-neutral-900 dark:text-neutral-100 placeholder:text-neutral-400 dark:placeholder:text-neutral-500 text-sm resize-y transition-shadow focus:outline-none focus:ring-2 focus:ring-fuchsia-500/40 focus:border-fuchsia-500/60"
             />
 
@@ -318,28 +338,32 @@ export const FeedbackBubble: React.FC<FeedbackBubbleProps> = ({
         <DialogFooter className="flex items-center gap-3 pt-2">
           {mode === "input" ? (
             <>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleCopyAndGo}
-                className="mr-auto text-fuchsia-600 hover:text-fuchsia-700 hover:bg-fuchsia-500/10 dark:text-fuchsia-400 dark:hover:text-fuchsia-300"
-              >
-                <Copy className="w-4 h-4 mr-1.5" />
-                Copy & Go
-              </Button>
-              <div className="flex gap-2">
+              {!reportType && (
                 <Button
-                  variant="outline"
-                  onClick={() => handleSubmit(true)}
-                  className="border-fuchsia-500/30 text-fuchsia-600 hover:bg-fuchsia-500/10 hover:text-fuchsia-700 dark:text-fuchsia-400"
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleCopyAndGo}
+                  className="mr-auto text-fuchsia-600 hover:text-fuchsia-700 hover:bg-fuchsia-500/10 dark:text-fuchsia-400 dark:hover:text-fuchsia-300"
                 >
-                  Submit & Continue
+                  <Copy className="w-4 h-4 mr-1.5" />
+                  Copy & Go
                 </Button>
+              )}
+              <div className="flex gap-2 ml-auto">
+                {!reportType && (
+                  <Button
+                    variant="outline"
+                    onClick={() => handleSubmit(true)}
+                    className="border-fuchsia-500/30 text-fuchsia-600 hover:bg-fuchsia-500/10 hover:text-fuchsia-700 dark:text-fuchsia-400"
+                  >
+                    Submit & Continue
+                  </Button>
+                )}
                 <Button
                   onClick={() => handleSubmit(false)}
                   className="bg-linear-to-r from-violet-600 via-fuchsia-500 to-pink-500 text-white shadow-sm shadow-fuchsia-500/30 hover:shadow-md hover:shadow-fuchsia-500/40 hover:scale-[1.02] transition-all"
                 >
-                  Submit
+                  {reportType ? "Submit report" : "Submit"}
                 </Button>
               </div>
             </>

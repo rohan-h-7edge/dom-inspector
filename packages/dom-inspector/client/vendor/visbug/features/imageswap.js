@@ -2,6 +2,7 @@ import $ from 'blingblingjs'
 import { getStyle } from '../utilities/'
 import { getDevServerBaseUrl } from '../../../utils/config-loader'
 import { getSourceInfo } from '../../../sourceDetector'
+import { getEditReportMode, editReportLabel, reportEdit } from '../utilities/apply-via-ai'
 
 let imgs      = []
   , overlays  = []
@@ -129,10 +130,15 @@ const showImageSwapPlayButton = (target, cssProp, oldSrc, newSrc, filename) => {
     return btn
   }
 
-  const playBtn = makeButton('▶ Apply via AI', '#22c55e', 140)
-  const saveBtn = makeButton('💾 Save to Context', '#6366f1', 300)
+  // Testers / report modes get a single report button and no ▶ (see
+  // apply-via-ai.js getEditReportMode).
+  const reportMode = getEditReportMode()
+  const playBtn = reportMode ? null : makeButton('▶ Apply via AI', '#22c55e', 140)
+  const saveBtn = reportMode
+    ? makeButton(editReportLabel(reportMode), '#f43f5e', 300)
+    : makeButton('💾 Save to Context', '#6366f1', 300)
   // Stack save button above play button so neither overlaps.
-  saveBtn.style.top = `${Math.min(window.innerHeight - 76, rect.bottom + 42)}px`
+  if (playBtn) saveBtn.style.top = `${Math.min(window.innerHeight - 76, rect.bottom + 42)}px`
 
   activePlayButtonAction = async () => {
     let text
@@ -160,15 +166,19 @@ const showImageSwapPlayButton = (target, cssProp, oldSrc, newSrc, filename) => {
       return // leave the buttons up so the user can retry
     }
 
-    target.dispatchEvent(new CustomEvent('save-to-context', {
-      bubbles: true,
-      detail: { sourceInfo: getSourceInfo(target), description },
-    }))
+    if (reportMode) {
+      reportEdit(target, description, reportMode)
+    } else {
+      target.dispatchEvent(new CustomEvent('save-to-context', {
+        bubbles: true,
+        detail: { sourceInfo: getSourceInfo(target), description },
+      }))
+    }
 
     removePlayButton()
   }
 
-  document.body.appendChild(playBtn)
+  if (playBtn) document.body.appendChild(playBtn)
   document.body.appendChild(saveBtn)
   activePlayButton = playBtn
   activeSaveButton = saveBtn

@@ -120,6 +120,10 @@ const InspectorContainer: React.FC<InspectorContainerProps> = ({ shadowRoot, mou
   // "correction" mode needs a before/after style diff — captured at finalize
   // time (before) and re-read at submit time (after any live VisBug edits).
   const correctionBeforeRef = React.useRef<Record<string, string> | null>(null);
+  // A VisBug edit being reported (tester / report mode): its auto-generated
+  // change summary, appended to the description the reporter types in the
+  // bubble (see handleCollabReportFromMetatip / handleInspectionSubmit).
+  const pendingEditRef = React.useRef<string | null>(null);
 
   // Agent State
   // The ACP session itself can't survive a reload (the previous session's process is
@@ -175,6 +179,7 @@ const InspectorContainer: React.FC<InspectorContainerProps> = ({ shadowRoot, mou
   }, [isActive, showNotif]);
 
   const handleBubbleClose = useCallback(() => {
+    pendingEditRef.current = null;
     setBubbleMode(null);
     setIsActive(false);
     setCollabMode("off");
@@ -542,37 +547,37 @@ const InspectorContainer: React.FC<InspectorContainerProps> = ({ shadowRoot, mou
     (window as any).__DOM_INSPECTOR_COLLAB_MODE__ = collabMode;
   }, [collabMode]);
 
-  // The metatip's floating buttons show a single "Report" action in place of
-  // "Apply via AI"/"Save to Context" while collabMode is active (see
-  // apply-via-ai.js) — this submits it to the collab hub the same way the
-  // normal select→bubble→submit flow does.
+  // Same for the role: in tester mode (with a hub configured) VisBug edits
+  // are filed as bug reports and the "Apply via AI" buttons are hidden.
+  useEffect(() => {
+    (window as any).__DOM_INSPECTOR_COLLAB_ROLE__ = collab.enabled ? collabRole : null;
+  }, [collab.enabled, collabRole]);
+
+  // The edit tools' floating buttons show a single "Report bug" action in
+  // place of "Apply via AI"/"Save to Context" for testers or while collabMode
+  // is active (see apply-via-ai.js). Rather than posting straight away, open
+  // the feedback bubble on the edited element so the reporter can describe
+  // the problem; handleInspectionSubmit then posts it with the edit attached.
+  const handleElementInspectedRef = React.useRef(handleElementInspected);
+  handleElementInspectedRef.current = handleElementInspected;
   useEffect(() => {
     const handleCollabReportFromMetatip = (e: Event) => {
       const detail = (e as CustomEvent<{ text?: string; mode?: string }>).detail;
-      if (!detail?.text) return;
-
       const el = e.target as Element | null;
-      const info = el ? getSourceInfo(el) : null;
-      const selector = info?.elementInfo?.domPath || "";
+      if (!detail?.text || !el) return;
 
-      collab.createReport({
-        type: detail.mode === "correction" ? "correction" : "bug",
-        selector,
-        domPath: selector || null,
-        description: detail.text,
-        reporterRole: collabRole,
+      pendingEditRef.current = detail.text;
+      setCollabMode(detail.mode === "correction" ? "correction" : "bug");
+      void handleElementInspectedRef.current(getSourceInfo(el)).then(() => {
+        // The edit text already carries the before/after for this path.
+        correctionBeforeRef.current = null;
       });
-
-      setCollabMode("off");
-      setIsActive(false);
-      document.body.style.cursor = "";
-      showNotif(detail.mode === "correction" ? "Correction submitted" : "Bug report submitted");
     };
 
     document.addEventListener("collab-report-from-metatip", handleCollabReportFromMetatip);
     return () =>
       document.removeEventListener("collab-report-from-metatip", handleCollabReportFromMetatip);
-  }, [collab, collabRole, showNotif]);
+  }, []);
 
   const { selection: visbugSelection, finalizeSelection } = useVisBugInspector({
     isActive,
@@ -615,11 +620,20 @@ const InspectorContainer: React.FC<InspectorContainerProps> = ({ shadowRoot, mou
           ? diffStyleSnapshots(correctionBeforeRef.current, snapshotElementStyle(sourceInfo.element))
           : null;
 
+      const editSummary = pendingEditRef.current;
+      pendingEditRef.current = null;
+      const reportDescription = [
+        finalDescription,
+        editSummary && `Change made with VisBug:\n${editSummary}`,
+      ]
+        .filter(Boolean)
+        .join("\n\n");
+
       collab.createReport({
         type: collabMode === "correction" ? "correction" : "bug",
         selector,
         domPath: selector || null,
-        description: finalDescription || null,
+        description: reportDescription || null,
         diff,
         screenshot: screenshot || null,
         reporterRole: collabRole,
@@ -791,6 +805,7 @@ const InspectorContainer: React.FC<InspectorContainerProps> = ({ shadowRoot, mou
               client={client as any}
               isClientReady={isClientReady}
               selectedAgent={selectedAgentName || undefined}
+              reportType={collabMode === "off" ? undefined : collabMode}
             />
           </div>
         )}

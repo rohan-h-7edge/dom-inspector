@@ -1,14 +1,18 @@
 import type { InspectedElement, ReactFiber } from "./types";
 
 /**
- * Generate DOM path from element to root. Ids/classes are CSS-escaped by
- * default so the path is a valid selector even for Tailwind classes like
- * `py-1.5` or `md:flex` (unescaped, `.py-1.5` parses as classes `py-1` + `5`).
- * `escape: false` reproduces the pre-escaping format, used to match reports
- * stored before this change.
+ * Generate DOM path from element to root, usable as a selector that matches
+ * this exact element:
+ * - ids/classes are CSS-escaped, so Tailwind classes like `py-1.5` or
+ *   `md:flex` stay valid (unescaped, `.py-1.5` parses as `py-1` + `5`);
+ * - a segment gets `:nth-of-type(n)` when siblings share its tag, so look-alike
+ *   siblings (e.g. two filter buttons built from the same component) don't
+ *   produce the same path and resolve to whichever comes first.
+ * `legacy: true` reproduces the old format (neither of the above), used to
+ * match reports stored before these changes.
  */
-export function getDomPath(element: Element, { escape = true }: { escape?: boolean } = {}): string {
-  const esc = escape ? (s: string) => CSS.escape(s) : (s: string) => s;
+export function getDomPath(element: Element, { legacy = false }: { legacy?: boolean } = {}): string {
+  const esc = legacy ? (s: string) => s : (s: string) => CSS.escape(s);
   const path: string[] = [];
   let current: Element | null = element;
 
@@ -24,6 +28,13 @@ export function getDomPath(element: Element, { escape = true }: { escape?: boole
       if (classes.length > 0 && classes[0]) {
         selector += `.${classes.map(esc).join(".")}`;
       }
+    }
+
+    const parent: Element | null = current.parentElement;
+    if (!legacy && parent) {
+      const tag = current.tagName;
+      const sameTag = Array.from(parent.children).filter((el) => el.tagName === tag);
+      if (sameTag.length > 1) selector += `:nth-of-type(${sameTag.indexOf(current) + 1})`;
     }
 
     path.unshift(selector);

@@ -3,6 +3,7 @@ import { schemeRule } from '../../utilities/'
 import { draggable } from '../../features/'
 import { MetatipStyles, MetatipLightStyles, MetatipDarkStyles } from '../styles.store'
 import { getSourceInfo } from '../../../../sourceDetector'
+import { getEditReportMode, editReportLabel, reportEdit } from '../../utilities/apply-via-ai'
 
 const escapeAttr = (str) => String(str).replace(/"/g, '&quot;')
 
@@ -116,10 +117,19 @@ export class Metatip extends HTMLElement {
 
   updatePlayButtonVisibility() {
     const display = this.editedValues.size > 0 ? '' : 'none'
+    // Testers / report modes file edits as reports instead of sending them to
+    // the agent, so ▶ is hidden and 💾 becomes the report button.
+    const reportMode = getEditReportMode()
     const playBtn = this.$shadow.querySelector('[data-play]')
-    if (playBtn) playBtn.style.display = display
+    if (playBtn) playBtn.style.display = reportMode ? 'none' : display
     const saveBtn = this.$shadow.querySelector('[data-save]')
-    if (saveBtn) saveBtn.style.display = display
+    if (saveBtn) {
+      saveBtn.style.display = display
+      saveBtn.textContent = reportMode ? '🐞' : '💾'
+      saveBtn.title = reportMode
+        ? editReportLabel(reportMode).replace(/^\S+ /, '')
+        : 'Save these style changes to context (without sending to the AI agent yet)'
+    }
   }
 
   buildStyleEditText() {
@@ -137,7 +147,7 @@ export class Metatip extends HTMLElement {
 
   handlePlayClick(e) {
     const btn = e.target.closest && e.target.closest('[data-play]')
-    if (!btn || this.editedValues.size === 0) return
+    if (!btn || this.editedValues.size === 0 || getEditReportMode()) return
 
     const { text, edits } = this.buildStyleEditText()
 
@@ -156,10 +166,15 @@ export class Metatip extends HTMLElement {
 
     const { text } = this.buildStyleEditText()
 
-    this.dispatchEvent(new CustomEvent('save-to-context', {
-      bubbles: true,
-      detail: { sourceInfo: getSourceInfo(this._lastEl), description: text },
-    }))
+    const reportMode = getEditReportMode()
+    if (reportMode) {
+      reportEdit(this._lastEl, text, reportMode)
+    } else {
+      this.dispatchEvent(new CustomEvent('save-to-context', {
+        bubbles: true,
+        detail: { sourceInfo: getSourceInfo(this._lastEl), description: text },
+      }))
+    }
 
     this.editedValues.clear()
     this.updatePlayButtonVisibility()

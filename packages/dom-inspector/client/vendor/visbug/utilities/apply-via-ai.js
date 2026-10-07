@@ -72,6 +72,33 @@ export const buildStableSelector = el => {
   return segments.join(' > ')
 }
 
+// Tester role (only set when a collab hub is configured — see inspector.tsx):
+// edits must not go to the agent; they're filed as bug reports instead.
+export const isTesterMode = () =>
+  typeof window !== 'undefined' && window.__DOM_INSPECTOR_COLLAB_ROLE__ === 'tester'
+
+// The report type an edit should be filed as, or null to use the normal
+// Apply-via-AI / Save-to-Context flow. An explicit "Submit correction" mode
+// wins; otherwise testers' edits are bugs.
+export const getEditReportMode = () => {
+  const collabMode = typeof window !== 'undefined' ? window.__DOM_INSPECTOR_COLLAB_MODE__ : 'off'
+  if (collabMode === 'bug' || collabMode === 'correction') return collabMode
+  return isTesterMode() ? 'bug' : null
+}
+
+export const editReportLabel = mode =>
+  mode === 'correction' ? '✏️ Submit correction' : '🐞 Report bug'
+
+// Hands the edit to inspector.tsx ('collab-report-from-metatip'), which opens
+// the feedback bubble so the reporter can describe the bug, then posts it to
+// the collab hub, where it shows up as an on-page marker.
+export const reportEdit = (el, text, mode) => {
+  el.dispatchEvent(new CustomEvent('collab-report-from-metatip', {
+    bubbles: true,
+    detail: { text, mode },
+  }))
+}
+
 export const removeApplyViaAiButton = () => {
   if (activeButton) {
     activeButton.remove()
@@ -122,25 +149,16 @@ export const showApplyViaAiButton = (anchorEl, text) => {
   const playTop = Math.min(window.innerHeight - 40, rect.bottom + 6)
   const saveTop = Math.min(window.innerHeight - 76, rect.bottom + 42)
 
-  // When the inspector bar's "Report a bug" / "Submit correction" mode is
-  // active (see inspector.tsx, which mirrors collabMode onto this global),
-  // reuse the existing "Save to Context" button rather than adding a new one
-  // — one click both queues it locally (as before) and posts it to the
-  // collab hub, where it shows up as an on-page marker for anyone else
-  // pointed at the same hub.
-  const collabMode = typeof window !== 'undefined' ? window.__DOM_INSPECTOR_COLLAB_MODE__ : 'off'
-  if (collabMode === 'bug' || collabMode === 'correction') {
-    const saveBtn = makeFloatingButton('💾 Save to Context', '#6366f1', rect, 300, playTop)
+  // In "Report a bug" / "Submit correction" mode, or for a tester, show a
+  // single report button instead of Apply via AI / Save to Context — one
+  // click both queues it locally and posts it to the collab hub, where it
+  // shows up as an on-page marker for anyone pointed at the same hub.
+  const reportMode = getEditReportMode()
+  if (reportMode) {
+    const saveBtn = makeFloatingButton(editReportLabel(reportMode), '#f43f5e', rect, 300, playTop)
 
     activeSaveAction = () => {
-      anchorEl.dispatchEvent(new CustomEvent('save-to-context', {
-        bubbles: true,
-        detail: { sourceInfo: getSourceInfo(anchorEl), description: text },
-      }))
-      anchorEl.dispatchEvent(new CustomEvent('collab-report-from-metatip', {
-        bubbles: true,
-        detail: { text, mode: collabMode },
-      }))
+      reportEdit(anchorEl, text, reportMode)
       removeApplyViaAiButton()
     }
 

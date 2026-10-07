@@ -468,6 +468,9 @@ export const InspectorBar = ({
     const onMetatipStyleEdit = (e: Event) => {
       const detail = (e as CustomEvent<{ text?: string }>).detail;
       if (!detail?.text) return;
+      // Testers file edits as bug reports; their ▶ buttons are hidden, and
+      // this guards any path that still dispatches the event.
+      if (collabEnabled && collabRole === "tester") return;
       submitToAgent(detail.text);
       setIsExpanded(true);
       setActivePanel("chat");
@@ -475,7 +478,7 @@ export const InspectorBar = ({
 
     window.addEventListener("metatip-style-edit", onMetatipStyleEdit);
     return () => window.removeEventListener("metatip-style-edit", onMetatipStyleEdit);
-  }, [availableAgents, selectedAgent, sessionId]);
+  }, [availableAgents, selectedAgent, sessionId, collabEnabled, collabRole]);
 
   // Forwards a "Resolve with AI" click on a bug-marker popover (rendered
   // outside this component, on the page itself) straight to the agent —

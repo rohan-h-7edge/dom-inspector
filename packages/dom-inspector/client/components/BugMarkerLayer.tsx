@@ -50,7 +50,7 @@ function resolveLegacyPath(path: string | null): Element | null {
   const tag = path.split(" > ").pop()?.match(/^[a-z][a-z0-9-]*/i)?.[0];
   if (!tag) return null;
   for (const el of document.getElementsByTagName(tag)) {
-    if (getDomPath(el, { escape: false }) === path) return el;
+    if (getDomPath(el, { legacy: true }) === path) return el;
   }
   return null;
 }

@@ -3737,6 +3737,16 @@ ${e.length>0?e.join(`
     }
   }
 
+  .shadow-rose-500\\/40 {
+    --tw-shadow-color: #ff235766;
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .shadow-rose-500\\/40 {
+      --tw-shadow-color: color-mix(in oklab, color-mix(in oklab, var(--color-rose-500) 40%, transparent) var(--tw-shadow-alpha), transparent);
+    }
+  }
+
   .ring-black\\/5 {
     --tw-ring-color: #0000000d;
   }

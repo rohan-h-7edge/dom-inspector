@@ -1,9 +1,14 @@
 import type { InspectedElement, ReactFiber } from "./types";
 
 /**
- * Generate DOM path from element to root
+ * Generate DOM path from element to root. Ids/classes are CSS-escaped by
+ * default so the path is a valid selector even for Tailwind classes like
+ * `py-1.5` or `md:flex` (unescaped, `.py-1.5` parses as classes `py-1` + `5`).
+ * `escape: false` reproduces the pre-escaping format, used to match reports
+ * stored before this change.
  */
-function getDomPath(element: Element): string {
+export function getDomPath(element: Element, { escape = true }: { escape?: boolean } = {}): string {
+  const esc = escape ? (s: string) => CSS.escape(s) : (s: string) => s;
   const path: string[] = [];
   let current: Element | null = element;
 
@@ -11,13 +16,13 @@ function getDomPath(element: Element): string {
     let selector = current.tagName.toLowerCase();
 
     if (current.id) {
-      selector += `#${current.id}`;
+      selector += `#${esc(current.id)}`;
       path.unshift(selector);
       break; // ID is unique, stop here
     } else if (current.className && typeof current.className === "string") {
       const classes = current.className.trim().split(/\s+/).slice(0, 2); // Limit to 2 classes for readability
       if (classes.length > 0 && classes[0]) {
-        selector += `.${classes.join(".")}`;
+        selector += `.${classes.map(esc).join(".")}`;
       }
     }
 

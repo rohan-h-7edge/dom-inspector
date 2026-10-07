@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Bug, Sparkles, Check, X, Loader2 } from "lucide-react";
 import { cn } from "../lib/utils";
 import type { CollabReport, ReporterRole } from "../hooks/useCollabReports";
+import { getDomPath } from "../sourceDetector";
 
 interface BugMarkerLayerProps {
   reports: CollabReport[];
@@ -31,10 +32,25 @@ function resolveElement(report: CollabReport): Element | null {
   }
   if (report.domPath) {
     try {
-      return document.querySelector(report.domPath);
+      const byDomPath = document.querySelector(report.domPath);
+      if (byDomPath) return byDomPath;
     } catch {
-      return null;
+      // invalid selector — fall through
     }
+  }
+  return resolveLegacyPath(report.domPath || report.selector);
+}
+
+/** Reports created before getDomPath escaped class names store paths like
+ * `div.max-w-149.5`, which querySelector misreads (or rejects outright for
+ * `md:flex`-style classes). Re-derive the unescaped path for every element
+ * with the same tag and compare strings instead. */
+function resolveLegacyPath(path: string | null): Element | null {
+  if (!path) return null;
+  const tag = path.split(" > ").pop()?.match(/^[a-z][a-z0-9-]*/i)?.[0];
+  if (!tag) return null;
+  for (const el of document.getElementsByTagName(tag)) {
+    if (getDomPath(el, { escape: false }) === path) return el;
   }
   return null;
 }

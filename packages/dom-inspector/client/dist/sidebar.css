@@ -1290,6 +1290,10 @@
     max-width: var(--container-2xl);
   }
 
+  .max-w-149\.5 {
+    max-width: calc(var(--spacing) * 149.5);
+  }
+
   .max-w-\[70vw\] {
     max-width: 70vw;
   }
@@ -4466,6 +4470,10 @@
   }
 
   @media (min-width: 48rem) {
+    .md\:flex {
+      display: flex;
+    }
+
     .md\:grid-cols-\[1fr_320px\] {
       grid-template-columns: 1fr 320px;
     }

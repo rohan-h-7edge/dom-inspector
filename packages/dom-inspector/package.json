@@ -25,7 +25,8 @@
   "files": [
     "dist",
     "client/dist",
-    "client.d.ts"
+    "client.d.ts",
+    "quality-rules"
   ],
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",

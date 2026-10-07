@@ -108,6 +108,7 @@ The 📥 **Context** dialog also has these tabs:
 ## AI agents and MCP
 
 - **Agents.** The chat bar supports Claude Code (the default), Codex, Gemini CLI, GitHub Copilot, Cursor, Goose and other [ACP](https://agentclientprotocol.com) agents. Choose one from the agent menu.
+- **Quality gate.** Every code change requested from the inspector (Apply via AI, inspections, Resolve with AI, design specs, performance fixes) tells the agent to call the `review_code_quality` tool before reporting done. It type-checks and lints the changed files with your project's own TypeScript, ESLint or oxlint, then has the agent review its changes against bundled React performance, composition, accessibility and SOLID / clean-code rules (sources in `quality-rules/NOTICE.md`).
 - **MCP server.** The plugin also starts one at `http://localhost:6137/__mcp__/sse` and adds it to your editor's MCP config (Cursor, VS Code, Claude Code), so your editor's agent can inspect the page as well.
 
 > If the agent in the bar says *"cannot be launched inside another Claude Code session"*, start your dev server from a normal terminal, not from inside Claude Code.

@@ -34,6 +34,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { usePrompts } from "../hooks/usePrompts";
 import { PromptParamsDialog } from "./PromptParamsDialog";
 import { PromptsPanel } from "./PromptsPanel";
+import { withQualityGate } from "../lib/qualityGate";
 
 // Persists whether the Full Page Context dialog is open across a page reload
 // (e.g. the Performance tab's "Re-run" button), so the user doesn't have to
@@ -471,7 +472,7 @@ export const InspectorBar = ({
       // Testers file edits as bug reports; their ▶ buttons are hidden, and
       // this guards any path that still dispatches the event.
       if (collabEnabled && collabRole === "tester") return;
-      submitToAgent(detail.text);
+      submitToAgent(withQualityGate(detail.text));
       setIsExpanded(true);
       setActivePanel("chat");
     };
@@ -487,7 +488,7 @@ export const InspectorBar = ({
     const onCollabResolveWithAI = (e: Event) => {
       const detail = (e as CustomEvent<{ text?: string }>).detail;
       if (!detail?.text) return;
-      submitToAgent(detail.text);
+      submitToAgent(withQualityGate(detail.text));
       setIsExpanded(true);
       setActivePanel("chat");
     };
@@ -1013,7 +1014,7 @@ export const InspectorBar = ({
           setShowContextDialog(false);
         }}
         onSubmitToAgent={(text) => {
-          submitToAgent(text);
+          submitToAgent(withQualityGate(text));
           setShowContextDialog(false);
           setActivePanel("chat");
         }}
@@ -1024,7 +1025,7 @@ export const InspectorBar = ({
         open={showAnnotationDialog}
         onOpenChange={setShowAnnotationDialog}
         onSubmitAgent={(text) => {
-          submitToAgent(text);
+          submitToAgent(withQualityGate(text));
           setActivePanel("chat");
         }}
       />

@@ -30,6 +30,7 @@ import {
   getNativeConsoleText,
   getStdioText,
 } from "./mcp-native.js";
+import { registerQualityTool } from "./mcp-quality.js";
 
 import type { Prompt } from "../client/constants/types";
 
@@ -138,6 +139,9 @@ export async function createInspectorMcpServer(serverContext?: ServerContext): P
 
   // Stdio is always native (dev server stdout/stderr, not a browser concept).
   registerStdioTool(mcpServer);
+
+  // Quality gate over the user's changed files (runs in this Node process).
+  registerQualityTool(mcpServer);
 
   // ── Register client-side (CMCP) tools ─────────────────────────────────────
 

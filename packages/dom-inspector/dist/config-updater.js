@@ -23,9 +23,9 @@ import * as https from "https";
 import * as zlib from "zlib";
 import { asSchema, convertToModelMessages, jsonSchema, stepCountIs, streamText, tool } from "ai";
 import { ClientSideConnection, PROTOCOL_VERSION, ndJsonStream, planEntrySchema } from "@agentclientprotocol/sdk";
-import { spawn } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { customAlphabet } from "nanoid/non-secure";
-import fs$1, { appendFileSync, mkdtempSync } from "node:fs";
+import fs$1, { appendFileSync, existsSync as existsSync$1, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { fileURLToPath as fileURLToPath$1 } from "url";
 import { createRequire as createRequire$1 } from "module";
@@ -34860,7 +34860,7 @@ var require_webidl = /* @__PURE__ */ __commonJS$1({ "../../node_modules/undici/l
 	webidl$16.brandCheckMultiple = function(List) {
 		const prototypes = List.map((c) => webidl$16.util.MakeTypeAssertion(c));
 		return (V) => {
-			if (prototypes.every((typeCheck) => !typeCheck(V))) {
+			if (prototypes.every((typeCheck$1) => !typeCheck$1(V))) {
 				const err = /* @__PURE__ */ new TypeError("Illegal invocation");
 				err.code = "ERR_INVALID_THIS";
 				throw err;
@@ -117538,7 +117538,7 @@ Returns: array of element contexts (max 50).`,
 	},
 	update_inspection_status: {
 		name: "update_inspection_status",
-		description: "Update inspection status. Parameters: inspectionId (optional, auto-detects), status ('in-progress'|'completed'|'failed'|'deleted'), message (required for completed/failed).",
+		description: "Update inspection status. Parameters: inspectionId (optional, auto-detects), status ('in-progress'|'completed'|'failed'|'deleted'), message (required for completed/failed). Before 'completed', call review_code_quality and fix what it reports.",
 		inputSchema: {
 			type: "object",
 			properties: {
@@ -117606,6 +117606,18 @@ Returns: array of element contexts (max 50).`,
 			properties: { stdioid: {
 				type: "number",
 				description: "Stdio ID from list to get full details."
+			} }
+		}
+	},
+	review_code_quality: {
+		name: "review_code_quality",
+		description: `Quality gate — call after editing code and before reporting the work as done or marking an inspection completed. Type-checks and lints the files you changed (git diff vs HEAD, or the files you pass) and returns errors in those files only, plus a review checklist (React performance, component composition, accessibility/UI, SOLID & clean code, security) with paths to the full rule files. Fix every reported error and every 🔴 blocking checklist violation in your changes, then call again until it reports PASS.`,
+		inputSchema: {
+			type: "object",
+			properties: { files: {
+				type: "array",
+				items: { type: "string" },
+				description: "Optional. Files to check, relative to the project root. Defaults to all changed source files."
 			} }
 		}
 	},
@@ -117879,6 +117891,284 @@ function getStdioText(stdioid) {
 }
 
 //#endregion
+//#region src/mcp-quality.ts
+const SOURCE_FILE = /\.(ts|tsx|mts|cts|js|jsx|mjs|cjs)$/;
+const TS_FILE = /\.(ts|tsx|mts|cts)$/;
+const REACT_FILE = /\.(tsx|jsx)$/;
+const IGNORED_DIR = /(^|\/)(node_modules|dist|dist-[a-z]+|build|out|coverage|\.next|\.nuxt|\.svelte-kit|\.claude)\//;
+const ESLINT_CONFIGS = [
+	"eslint.config.js",
+	"eslint.config.mjs",
+	"eslint.config.cjs",
+	"eslint.config.ts",
+	".eslintrc.js",
+	".eslintrc.cjs",
+	".eslintrc.json",
+	".eslintrc.yml",
+	".eslintrc.yaml",
+	".eslintrc"
+];
+const COMMAND_TIMEOUT_MS = 18e4;
+const MAX_LISTED_ERRORS = 50;
+function run(cmd, args, cwd$1) {
+	return new Promise((resolve$4) => {
+		execFile(cmd, args, {
+			cwd: cwd$1,
+			timeout: COMMAND_TIMEOUT_MS,
+			maxBuffer: 32 * 1024 * 1024
+		}, (error$2, stdout, stderr) => {
+			resolve$4({
+				code: error$2 ? typeof error$2.code === "number" ? error$2.code : 1 : 0,
+				output: `${stdout}${stderr}`
+			});
+		});
+	});
+}
+/** Walks up from `startDir` to `root` (inclusive) and returns the first existing candidate. */
+function findUp(startDir, root$2, candidates) {
+	let dir = startDir;
+	while (true) {
+		for (const name$1 of candidates) {
+			const candidate = path$1.join(dir, name$1);
+			if (existsSync$1(candidate)) return candidate;
+		}
+		if (dir === root$2 || dir === path$1.dirname(dir)) return null;
+		dir = path$1.dirname(dir);
+	}
+}
+const findBin = (startDir, root$2, bin) => findUp(startDir, root$2, [path$1.join("node_modules", ".bin", bin)]);
+/** Groups files by a key; files whose key is null are dropped. */
+function groupBy(files, keyOf) {
+	const groups = /* @__PURE__ */ new Map();
+	for (const file of files) {
+		const key$1 = keyOf(file);
+		if (!key$1) continue;
+		groups.set(key$1, [...groups.get(key$1) ?? [], file]);
+	}
+	return groups;
+}
+async function projectRoot() {
+	const { code, output } = await run("git", ["rev-parse", "--show-toplevel"], process.cwd());
+	return code === 0 ? output.trim() : process.cwd();
+}
+async function changedFiles(root$2) {
+	const [diff$2, untracked] = await Promise.all([run("git", [
+		"diff",
+		"--name-only",
+		"HEAD"
+	], root$2), run("git", [
+		"ls-files",
+		"--others",
+		"--exclude-standard"
+	], root$2)]);
+	const lines = [diff$2, untracked].filter((r) => r.code === 0).flatMap((r) => r.output.split("\n")).map((line$1) => line$1.trim()).filter((line$1) => SOURCE_FILE.test(line$1) && !IGNORED_DIR.test(line$1));
+	return [...new Set(lines)].sort();
+}
+/**
+* Configs to type-check for a tsconfig. A "solution" tsconfig (Vite's default:
+* `files: []` plus `references`) checks nothing itself with `tsc -p`, so its
+* referenced configs are checked instead.
+*/
+async function configsToCheck(tsc, config$1) {
+	const { code, output } = await run(tsc, [
+		"--showConfig",
+		"-p",
+		config$1
+	], path$1.dirname(config$1));
+	if (code !== 0) return [config$1];
+	try {
+		const resolved = JSON.parse(output);
+		if (!(resolved.references?.length && !resolved.files?.length && !resolved.include?.length)) return [config$1];
+		return resolved.references.map((ref) => {
+			const target = path$1.resolve(path$1.dirname(config$1), ref.path);
+			return target.endsWith(".json") ? target : path$1.join(target, "tsconfig.json");
+		});
+	} catch {
+		return [config$1];
+	}
+}
+/** Type-checks each changed TS file against its nearest tsconfig; reports only errors in changed files. */
+async function typeCheck(root$2, files) {
+	const tsFiles = files.filter((f) => TS_FILE.test(f));
+	if (tsFiles.length === 0) return {
+		status: "SKIPPED",
+		summary: "no TypeScript files changed"
+	};
+	const byConfig = groupBy(tsFiles, (f) => findUp(path$1.dirname(path$1.join(root$2, f)), root$2, ["tsconfig.json"]));
+	if (byConfig.size === 0) return {
+		status: "SKIPPED",
+		summary: "no tsconfig.json found"
+	};
+	const changed = new Set(tsFiles);
+	const errors$1 = [];
+	let ignored = 0;
+	for (const nearest of byConfig.keys()) {
+		const tsc = findBin(path$1.dirname(nearest), root$2, "tsc");
+		if (!tsc) return {
+			status: "SKIPPED",
+			summary: "TypeScript (tsc) is not installed"
+		};
+		for (const config$1 of await configsToCheck(tsc, nearest)) {
+			const args = [
+				"--noEmit",
+				"--pretty",
+				"false",
+				"-p",
+				config$1
+			];
+			let { output } = await run(tsc, args, root$2);
+			if (output.includes("TS5103")) ({output} = await run(tsc, [
+				...args,
+				"--ignoreDeprecations",
+				"5.0"
+			], root$2));
+			for (const line$1 of output.split("\n")) {
+				if (!line$1.includes("error TS")) continue;
+				const match = line$1.match(/^(.+?)\(\d+,\d+\): error TS/);
+				if (!match) return {
+					status: "FAIL",
+					summary: "tsc could not run",
+					details: line$1
+				};
+				if (changed.has(path$1.relative(root$2, path$1.resolve(root$2, match[1])))) errors$1.push(line$1);
+				else ignored++;
+			}
+		}
+	}
+	const ignoredNote = ignored ? ` (${ignored} pre-existing errors in other files ignored)` : "";
+	return errors$1.length ? {
+		status: "FAIL",
+		summary: `${errors$1.length} error(s) in changed files${ignoredNote}`,
+		details: errors$1.slice(0, MAX_LISTED_ERRORS).join("\n")
+	} : {
+		status: "PASS",
+		summary: `no errors in changed files${ignoredNote}`
+	};
+}
+/** Lints with the project's ESLint when it has a config, otherwise oxlint if installed. */
+async function lint(root$2, files) {
+	const existing = files.filter((f) => existsSync$1(path$1.join(root$2, f)));
+	if (existing.length === 0) return {
+		status: "SKIPPED",
+		summary: "no files to lint"
+	};
+	const byEslintConfig = groupBy(existing, (f) => findUp(path$1.dirname(path$1.join(root$2, f)), root$2, ESLINT_CONFIGS));
+	if (byEslintConfig.size > 0) {
+		const outputs = [];
+		let failed = false;
+		for (const [config$1, group] of byEslintConfig) {
+			const dir = path$1.dirname(config$1);
+			const eslint = findBin(dir, root$2, "eslint");
+			if (!eslint) continue;
+			const { code, output } = await run(eslint, group.map((f) => path$1.join(root$2, f)), dir);
+			if (code === 2) return {
+				status: "SKIPPED",
+				summary: "ESLint failed to run",
+				details: output.trim()
+			};
+			if (code !== 0) failed = true;
+			if (output.trim()) outputs.push(output.trim());
+		}
+		if (outputs.length || failed) return {
+			status: failed ? "FAIL" : "PASS",
+			summary: failed ? "ESLint errors" : "ESLint warnings only",
+			details: outputs.join("\n")
+		};
+		return {
+			status: "PASS",
+			summary: "ESLint: no problems"
+		};
+	}
+	const oxlint = findBin(root$2, root$2, "oxlint");
+	if (oxlint) {
+		const { code, output } = await run(oxlint, existing, root$2);
+		return code === 0 ? {
+			status: "PASS",
+			summary: "oxlint: no errors",
+			details: output.trim() || void 0
+		} : {
+			status: "FAIL",
+			summary: "oxlint errors",
+			details: output.trim()
+		};
+	}
+	return {
+		status: "SKIPPED",
+		summary: "no linter (ESLint config or oxlint) found"
+	};
+}
+/** Locates the bundled quality-rules folder from both src/ and dist/ builds. */
+function rulesDir() {
+	const here = path$1.dirname(fileURLToPath(import.meta.url));
+	return [path$1.resolve(here, "../quality-rules"), path$1.resolve(here, "../../quality-rules")].find((dir) => existsSync$1(dir)) ?? null;
+}
+function checklist(files) {
+	const hasReact = files.some((f) => REACT_FILE.test(f));
+	const sections = [];
+	if (hasReact) {
+		sections.push(`### React (react-best-practices, composition-patterns)
+- 🔴 Hooks: no conditional hooks; effect dependencies complete; every listener/interval/subscription cleaned up in the effect's return.
+- 🔴 Don't define components inside components (\`rerender-no-inline-components\`).
+- 🟡 Derive state during render instead of syncing it in effects (\`rerender-derived-state-no-effect\`); functional setState for updates based on the previous value.
+- 🟡 Independent awaits run in parallel with \`Promise.all\` (\`async-parallel\`); heavy components loaded lazily (\`bundle-dynamic-imports\`).
+- 🟡 Conditional rendering with a ternary, not \`count && <X/>\` (\`rendering-conditional-render\`).
+- 🟡 No boolean props that switch behavior — use explicit variants or composition (\`architecture-avoid-boolean-props\`); children over render props.
+- 🟡 One responsibility per component; move non-UI logic into hooks; split components that grow past ~200 lines.`);
+		sections.push(`### UI & accessibility (web-design-guidelines)
+- 🔴 Actions use \`<button>\`, navigation uses \`<a>\` — no \`<div onClick>\`; icon-only buttons have \`aria-label\`; form controls have labels; images have \`alt\`.
+- 🔴 Visible keyboard focus — never \`outline: none\` without a \`:focus-visible\` replacement.
+- 🟡 Async messages (toasts, errors) use \`aria-live\`; animations honor \`prefers-reduced-motion\`; no \`transition: all\`.
+- 🟡 Long text truncates or wraps; empty states handled; loading text ends with "…".`);
+	}
+	sections.push(`### Design & clean code (code-quality, code-review-skill)
+- 🟡 SOLID: single responsibility; extend through maps/strategies instead of growing type-switches; depend on injected abstractions, not concrete singletons; narrow props/interfaces.
+- 🟡 Functions under ~50 lines, cyclomatic complexity under 10, nesting ≤ 3; more than 4 parameters → an options object.
+- 🟡 Reuse existing helpers instead of duplicating logic; descriptive names; no magic numbers.
+- 🟢 No \`any\`; no leftover \`console.log\`; TODOs reference a ticket.`);
+	sections.push(`### Correctness & security (code-review-skill)
+- 🔴 No unsanitized HTML (\`dangerouslySetInnerHTML\`, \`innerHTML\`) from user or remote data; no secrets in client code; validate external input.
+- 🔴 Every promise awaited or handled; async errors reach the user or a log; no state updates after unmount (abort in-flight requests).
+- 🟡 Edge cases: empty/null data, failed requests, double submissions, race conditions.`);
+	return sections.join("\n\n");
+}
+function rulesIndex(dir) {
+	const p$1 = (rel) => path$1.join(dir, rel);
+	return `Open a rule file when a checklist item is unclear or you suspect a violation:
+- React performance — ${p$1("react-best-practices/SKILL.md")} (one file per rule in ${p$1("react-best-practices/rules/")})
+- Component composition — ${p$1("composition-patterns/SKILL.md")} (rules in ${p$1("composition-patterns/rules/")})
+- UI & accessibility — ${p$1("web-design-guidelines/guidelines.md")}
+- Review guides — ${p$1("code-review/reference/")} (react.md, typescript.md, architecture-review-guide.md, security-review-guide.md, code-quality-universal.md)
+- SOLID & clean code — ${p$1("code-quality/SKILL.md")}`;
+}
+function formatCheck(title, result) {
+	const body = result.details ? `\n\`\`\`\n${result.details}\n\`\`\`` : "";
+	return `## ${title}: ${result.status} — ${result.summary}${body}`;
+}
+async function reviewCodeQuality(requested) {
+	const root$2 = await projectRoot();
+	const files = requested?.length ? requested.map((f) => path$1.relative(root$2, path$1.resolve(root$2, f))).filter((f) => SOURCE_FILE.test(f)) : await changedFiles(root$2);
+	if (files.length === 0) return "# Code quality review: nothing to check\nNo changed source files (git diff vs HEAD is empty). If you edited files outside git, pass them in `files`.";
+	const [types$1, lintResult] = await Promise.all([typeCheck(root$2, files), lint(root$2, files)]);
+	const automatedFailed = types$1.status === "FAIL" || lintResult.status === "FAIL";
+	const dir = rulesDir();
+	return [
+		`# Code quality review — automated checks ${automatedFailed ? "FAIL" : "PASS"}`,
+		`Project: ${root$2}\nChanged files (${files.length}):\n${files.map((f) => `- ${f}`).join("\n")}`,
+		formatCheck("Type-check", types$1),
+		formatCheck("Lint", lintResult),
+		`## Review checklist — apply to the lines you changed\n🔴 must fix · 🟡 should fix · 🟢 nit. Don't flag untouched pre-existing code.\n\n${checklist(files)}`,
+		dir ? `## Full rules\n${rulesIndex(dir)}` : "",
+		automatedFailed ? "## Result: FAIL\nFix the errors above in the changed files, then call review_code_quality again. Do not report the work as done yet." : "## Result: automated checks PASS\nNow review your changes against the checklist. Fix every 🔴 violation (and 🟡 unless there is a reason not to), then call review_code_quality again if you changed code. Only then report done — and say briefly what the review found."
+	].filter(Boolean).join("\n\n");
+}
+function registerQualityTool(mcpServer) {
+	mcpServer.tool(TOOL_SCHEMAS.review_code_quality.name, TOOL_SCHEMAS.review_code_quality.description, TOOL_SCHEMAS.review_code_quality.inputSchema, async ({ files }) => ({ content: [{
+		type: "text",
+		text: await reviewCodeQuality(files)
+	}] }));
+}
+
+//#endregion
 //#region src/mcp.ts
 function textMessage(text$2) {
 	return { messages: [{
@@ -117945,6 +118235,7 @@ async function createInspectorMcpServer(serverContext) {
 		registerNativeConsoleTool(mcpServer);
 	}
 	registerStdioTool(mcpServer);
+	registerQualityTool(mcpServer);
 	const mcpClientExecServer = createClientExecServer(mcpServer, "inspector");
 	mcpClientExecServer.registerClientToolSchemas([
 		TOOL_SCHEMAS.capture_element_context,

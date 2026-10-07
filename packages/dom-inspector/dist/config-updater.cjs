@@ -29,6 +29,8 @@ let node_net = require("node:net");
 node_net = require_chunk.__toESM(node_net);
 let node_crypto = require("node:crypto");
 node_crypto = require_chunk.__toESM(node_crypto);
+let node_url = require("node:url");
+node_url = require_chunk.__toESM(node_url);
 let node_path = require("node:path");
 node_path = require_chunk.__toESM(node_path);
 let node_process = require("node:process");
@@ -3494,8 +3496,8 @@ var require_utils$12 = /* @__PURE__ */ require_chunk.__commonJS({ "../../node_mo
 	*
 	* @see https://datatracker.ietf.org/doc/html/rfc3986#section-5.2.4
 	*/
-	function removeDotSegments$1(path$3) {
-		let input = path$3;
+	function removeDotSegments$1(path$4) {
+		let input = path$4;
 		const output = [];
 		let nextSlash = -1;
 		let len = 0;
@@ -3776,8 +3778,8 @@ var require_schemes = /* @__PURE__ */ require_chunk.__commonJS({ "../../node_mod
 			wsComponent.secure = void 0;
 		}
 		if (wsComponent.resourceName) {
-			const [path$3, query] = wsComponent.resourceName.split("?");
-			wsComponent.path = path$3 && path$3 !== "/" ? path$3 : void 0;
+			const [path$4, query] = wsComponent.resourceName.split("?");
+			wsComponent.path = path$4 && path$4 !== "/" ? path$4 : void 0;
 			wsComponent.query = query;
 			wsComponent.resourceName = void 0;
 		}
@@ -31778,10 +31780,10 @@ var require_util$7 = /* @__PURE__ */ require_chunk.__commonJS({ "../../node_modu
 			if (!isHttpOrHttpsPrefixed(url$2.origin || url$2.protocol)) throw new InvalidArgumentError$38("Invalid URL protocol: the URL must start with `http:` or `https:`.");
 			const port = url$2.port != null ? url$2.port : url$2.protocol === "https:" ? 443 : 80;
 			let origin = url$2.origin != null ? url$2.origin : `${url$2.protocol || ""}//${url$2.hostname || ""}:${port}`;
-			let path$3 = url$2.path != null ? url$2.path : `${url$2.pathname || ""}${url$2.search || ""}`;
+			let path$4 = url$2.path != null ? url$2.path : `${url$2.pathname || ""}${url$2.search || ""}`;
 			if (origin[origin.length - 1] === "/") origin = origin.slice(0, origin.length - 1);
-			if (path$3 && path$3[0] !== "/") path$3 = `/${path$3}`;
-			return new URL(`${origin}${path$3}`);
+			if (path$4 && path$4[0] !== "/") path$4 = `/${path$4}`;
+			return new URL(`${origin}${path$4}`);
 		}
 		if (!isHttpOrHttpsPrefixed(url$2.origin || url$2.protocol)) throw new InvalidArgumentError$38("Invalid URL protocol: the URL must start with `http:` or `https:`.");
 		return url$2;
@@ -32656,8 +32658,8 @@ var require_diagnostics = /* @__PURE__ */ require_chunk.__commonJS({ "../../node
 			debugLog("connection to %s%s using %s%s errored - %s", host, port ? `:${port}` : "", protocol, version$1, error$2.message);
 		});
 		diagnosticsChannel$1.subscribe("undici:client:sendHeaders", (evt) => {
-			const { request: { method, path: path$3, origin } } = evt;
-			debugLog("sending request to %s %s%s", method, origin, path$3);
+			const { request: { method, path: path$4, origin } } = evt;
+			debugLog("sending request to %s %s%s", method, origin, path$4);
 		});
 	}
 	let isTrackingRequestEvents = false;
@@ -32669,16 +32671,16 @@ var require_diagnostics = /* @__PURE__ */ require_chunk.__commonJS({ "../../node
 		}
 		isTrackingRequestEvents = true;
 		diagnosticsChannel$1.subscribe("undici:request:headers", (evt) => {
-			const { request: { method, path: path$3, origin }, response: { statusCode } } = evt;
-			debugLog("received response to %s %s%s - HTTP %d", method, origin, path$3, statusCode);
+			const { request: { method, path: path$4, origin }, response: { statusCode } } = evt;
+			debugLog("received response to %s %s%s - HTTP %d", method, origin, path$4, statusCode);
 		});
 		diagnosticsChannel$1.subscribe("undici:request:trailers", (evt) => {
-			const { request: { method, path: path$3, origin } } = evt;
-			debugLog("trailers received from %s %s%s", method, origin, path$3);
+			const { request: { method, path: path$4, origin } } = evt;
+			debugLog("trailers received from %s %s%s", method, origin, path$4);
 		});
 		diagnosticsChannel$1.subscribe("undici:request:error", (evt) => {
-			const { request: { method, path: path$3, origin }, error: error$2 } = evt;
-			debugLog("request to %s %s%s errored - %s", method, origin, path$3, error$2.message);
+			const { request: { method, path: path$4, origin }, error: error$2 } = evt;
+			debugLog("request to %s %s%s errored - %s", method, origin, path$4, error$2.message);
 		});
 	}
 	let isTrackingWebSocketEvents = false;
@@ -32739,10 +32741,10 @@ var require_request$1 = /* @__PURE__ */ require_chunk.__commonJS({ "../../node_m
 	}
 	const kHandler = Symbol("handler");
 	var Request$4 = class {
-		constructor(origin, { path: path$3, method, body, headers, query, idempotent, blocking, upgrade: upgrade$1, headersTimeout, bodyTimeout, reset, expectContinue, servername, throwOnError, maxRedirections, typeOfService }, handler) {
-			if (typeof path$3 !== "string") throw new InvalidArgumentError$37("path must be a string");
-			else if (path$3[0] !== "/" && !(path$3.startsWith("http://") || path$3.startsWith("https://")) && method !== "CONNECT") throw new InvalidArgumentError$37("path must be an absolute URL or start with a slash");
-			else if (invalidPathRegex.test(path$3)) throw new InvalidArgumentError$37("invalid request path");
+		constructor(origin, { path: path$4, method, body, headers, query, idempotent, blocking, upgrade: upgrade$1, headersTimeout, bodyTimeout, reset, expectContinue, servername, throwOnError, maxRedirections, typeOfService }, handler) {
+			if (typeof path$4 !== "string") throw new InvalidArgumentError$37("path must be a string");
+			else if (path$4[0] !== "/" && !(path$4.startsWith("http://") || path$4.startsWith("https://")) && method !== "CONNECT") throw new InvalidArgumentError$37("path must be an absolute URL or start with a slash");
+			else if (invalidPathRegex.test(path$4)) throw new InvalidArgumentError$37("invalid request path");
 			if (typeof method !== "string") throw new InvalidArgumentError$37("method must be a string");
 			else if (normalizedMethodRecords$1[method] === void 0 && !isValidHTTPToken$3(method)) throw new InvalidArgumentError$37("invalid request method");
 			if (upgrade$1 && typeof upgrade$1 !== "string") throw new InvalidArgumentError$37("upgrade must be a string");
@@ -32783,7 +32785,7 @@ var require_request$1 = /* @__PURE__ */ require_chunk.__commonJS({ "../../node_m
 			this.completed = false;
 			this.aborted = false;
 			this.upgrade = upgrade$1 || null;
-			this.path = query ? serializePathWithQuery$3(path$3, query) : path$3;
+			this.path = query ? serializePathWithQuery$3(path$4, query) : path$4;
 			this.origin = origin;
 			this.protocol = getProtocolFromUrlString(origin);
 			this.idempotent = idempotent == null ? method === "HEAD" || method === "GET" : idempotent;
@@ -34840,7 +34842,7 @@ var require_webidl = /* @__PURE__ */ require_chunk.__commonJS({ "../../node_modu
 	webidl$16.brandCheckMultiple = function(List) {
 		const prototypes = List.map((c) => webidl$16.util.MakeTypeAssertion(c));
 		return (V) => {
-			if (prototypes.every((typeCheck) => !typeCheck(V))) {
+			if (prototypes.every((typeCheck$1) => !typeCheck$1(V))) {
 				const err = /* @__PURE__ */ new TypeError("Illegal invocation");
 				err.code = "ERR_INVALID_THIS";
 				throw err;
@@ -37389,7 +37391,7 @@ var require_client_h1 = /* @__PURE__ */ require_chunk.__commonJS({ "../../node_m
 	* @returns
 	*/
 	function writeH1(client, request$1) {
-		const { method, path: path$3, host, upgrade: upgrade$1, blocking, reset } = request$1;
+		const { method, path: path$4, host, upgrade: upgrade$1, blocking, reset } = request$1;
 		let { body, headers, contentLength } = request$1;
 		const expectsPayload = method === "PUT" || method === "POST" || method === "PATCH" || method === "QUERY" || method === "PROPFIND" || method === "PROPPATCH";
 		if (util$31.isFormDataLike(body)) {
@@ -37445,7 +37447,7 @@ var require_client_h1 = /* @__PURE__ */ require_chunk.__commonJS({ "../../node_m
 		if (client[kMaxRequests$1] && socket[kCounter$1]++ >= client[kMaxRequests$1]) socket[kReset$1] = true;
 		if (blocking) socket[kBlocking] = true;
 		if (socket.setTypeOfService) socket.setTypeOfService(request$1.typeOfService);
-		let header = `${method} ${path$3} HTTP/1.1\r\n`;
+		let header = `${method} ${path$4} HTTP/1.1\r\n`;
 		if (typeof host === "string") header += `host: ${host}\r\n`;
 		else header += client[kHostHeader$1];
 		if (upgrade$1) header += `connection: upgrade\r\nupgrade: ${upgrade$1}\r\n`;
@@ -37981,7 +37983,7 @@ var require_client_h2 = /* @__PURE__ */ require_chunk.__commonJS({ "../../node_m
 	function writeH2(client, request$1) {
 		const requestTimeout = request$1.bodyTimeout ?? client[kBodyTimeout$1];
 		const session = client[kHTTP2Session];
-		const { method, path: path$3, host, upgrade: upgrade$1, expectContinue, signal, protocol, headers: reqHeaders } = request$1;
+		const { method, path: path$4, host, upgrade: upgrade$1, expectContinue, signal, protocol, headers: reqHeaders } = request$1;
 		let { body } = request$1;
 		if (upgrade$1 != null && upgrade$1 !== "websocket") {
 			util$30.errorRequest(client, request$1, new InvalidArgumentError$31(`Custom upgrade "${upgrade$1}" not supported over HTTP/2`));
@@ -38034,7 +38036,7 @@ var require_client_h2 = /* @__PURE__ */ require_chunk.__commonJS({ "../../node_m
 				}
 				headers[HTTP2_HEADER_METHOD] = "CONNECT";
 				headers[HTTP2_HEADER_PROTOCOL] = "websocket";
-				headers[HTTP2_HEADER_PATH] = path$3;
+				headers[HTTP2_HEADER_PATH] = path$4;
 				if (protocol === "ws:" || protocol === "wss:") headers[HTTP2_HEADER_SCHEME] = protocol === "ws:" ? "http" : "https";
 				else headers[HTTP2_HEADER_SCHEME] = protocol === "http:" ? "http" : "https";
 				stream$3 = session.request(headers, {
@@ -38076,7 +38078,7 @@ var require_client_h2 = /* @__PURE__ */ require_chunk.__commonJS({ "../../node_m
 			stream$3.setTimeout(requestTimeout);
 			return true;
 		}
-		headers[HTTP2_HEADER_PATH] = path$3;
+		headers[HTTP2_HEADER_PATH] = path$4;
 		headers[HTTP2_HEADER_SCHEME] = protocol === "http:" ? "http" : "https";
 		const expectsPayload = method === "PUT" || method === "POST" || method === "PATCH";
 		if (body && typeof body.read === "function") body.read(0);
@@ -39941,8 +39943,8 @@ var require_proxy_agent = /* @__PURE__ */ require_chunk.__commonJS({ "../../node
 				}
 				if (onHeaders) onHeaders.call(this, statusCode, data$1, resume$1);
 			};
-			const { origin, path: path$3 = "/", headers = {} } = opts;
-			opts.path = origin + path$3;
+			const { origin, path: path$4 = "/", headers = {} } = opts;
+			opts.path = origin + path$4;
 			if (!("host" in headers) && !("Host" in headers)) {
 				const { host } = new URL(origin);
 				headers.host = host;
@@ -41740,16 +41742,16 @@ var require_mock_utils = /* @__PURE__ */ require_chunk.__commonJS({ "../../node_
 		}
 		return normalizedQp;
 	}
-	function safeUrl(path$3) {
-		if (typeof path$3 !== "string") return path$3;
-		const pathSegments = path$3.split("?", 3);
-		if (pathSegments.length !== 2) return path$3;
+	function safeUrl(path$4) {
+		if (typeof path$4 !== "string") return path$4;
+		const pathSegments = path$4.split("?", 3);
+		if (pathSegments.length !== 2) return path$4;
 		const qp = new URLSearchParams(pathSegments.pop());
 		qp.sort();
 		return [...pathSegments, qp.toString()].join("?");
 	}
-	function matchKey(mockDispatch$1, { path: path$3, method, body, headers }) {
-		const pathMatch = matchValue$1(mockDispatch$1.path, path$3);
+	function matchKey(mockDispatch$1, { path: path$4, method, body, headers }) {
+		const pathMatch = matchValue$1(mockDispatch$1.path, path$4);
 		const methodMatch = matchValue$1(mockDispatch$1.method, method);
 		const bodyMatch = typeof mockDispatch$1.body !== "undefined" ? matchValue$1(mockDispatch$1.body, body) : true;
 		const headersMatch = matchHeaders(mockDispatch$1, headers);
@@ -41767,8 +41769,8 @@ var require_mock_utils = /* @__PURE__ */ require_chunk.__commonJS({ "../../node_
 		const basePath = key$1.query ? serializePathWithQuery$2(key$1.path, key$1.query) : key$1.path;
 		const resolvedPath = typeof basePath === "string" ? safeUrl(basePath) : basePath;
 		const resolvedPathWithoutTrailingSlash = removeTrailingSlash(resolvedPath);
-		let matchedMockDispatches = mockDispatches.filter(({ consumed }) => !consumed).filter(({ path: path$3, ignoreTrailingSlash }) => {
-			return ignoreTrailingSlash ? matchValue$1(removeTrailingSlash(safeUrl(path$3)), resolvedPathWithoutTrailingSlash) : matchValue$1(safeUrl(path$3), resolvedPath);
+		let matchedMockDispatches = mockDispatches.filter(({ consumed }) => !consumed).filter(({ path: path$4, ignoreTrailingSlash }) => {
+			return ignoreTrailingSlash ? matchValue$1(removeTrailingSlash(safeUrl(path$4)), resolvedPathWithoutTrailingSlash) : matchValue$1(safeUrl(path$4), resolvedPath);
 		});
 		if (matchedMockDispatches.length === 0) throw new MockNotMatchedError(`Mock dispatch not matched for path '${resolvedPath}'`);
 		matchedMockDispatches = matchedMockDispatches.filter(({ method }) => matchValue$1(method, key$1.method));
@@ -41811,15 +41813,15 @@ var require_mock_utils = /* @__PURE__ */ require_chunk.__commonJS({ "../../node_
 	/**
 	* @param {string} path Path to remove trailing slash from
 	*/
-	function removeTrailingSlash(path$3) {
-		while (path$3.endsWith("/")) path$3 = path$3.slice(0, -1);
-		if (path$3.length === 0) path$3 = "/";
-		return path$3;
+	function removeTrailingSlash(path$4) {
+		while (path$4.endsWith("/")) path$4 = path$4.slice(0, -1);
+		if (path$4.length === 0) path$4 = "/";
+		return path$4;
 	}
 	function buildKey$1(opts) {
-		const { path: path$3, method, body, headers, query } = opts;
+		const { path: path$4, method, body, headers, query } = opts;
 		return {
-			path: path$3,
+			path: path$4,
 			method,
 			body,
 			headers,
@@ -42386,10 +42388,10 @@ var require_pending_interceptors_formatter = /* @__PURE__ */ require_chunk.__com
 			});
 		}
 		format(pendingInterceptors) {
-			const withPrettyHeaders = pendingInterceptors.map(({ method, path: path$3, data: { statusCode }, persist, times, timesInvoked, origin }) => ({
+			const withPrettyHeaders = pendingInterceptors.map(({ method, path: path$4, data: { statusCode }, persist, times, timesInvoked, origin }) => ({
 				Method: method,
 				Origin: origin,
-				Path: path$3,
+				Path: path$4,
 				"Status code": statusCode,
 				Persistent: persist ? PERSISTENT : NOT_PERSISTENT,
 				Invocations: timesInvoked,
@@ -42447,8 +42449,8 @@ var require_mock_agent = /* @__PURE__ */ require_chunk.__commonJS({ "../../node_
 			const acceptNonStandardSearchParameters = this[kMockAgentAcceptsNonStandardSearchParameters];
 			const dispatchOpts = { ...opts };
 			if (acceptNonStandardSearchParameters && dispatchOpts.path) {
-				const [path$3, searchParams] = dispatchOpts.path.split("?");
-				dispatchOpts.path = `${path$3}?${normalizeSearchParams(searchParams, acceptNonStandardSearchParameters)}`;
+				const [path$4, searchParams] = dispatchOpts.path.split("?");
+				dispatchOpts.path = `${path$4}?${normalizeSearchParams(searchParams, acceptNonStandardSearchParameters)}`;
 			}
 			return this[kAgent].dispatch(dispatchOpts, handler);
 		}
@@ -42925,10 +42927,10 @@ var require_snapshot_recorder = /* @__PURE__ */ require_chunk.__commonJS({ "../.
 		* @return {Promise<void>} - Resolves when snapshots are loaded
 		*/
 		async loadSnapshots(filePath) {
-			const path$3 = filePath || this.#snapshotPath;
-			if (!path$3) throw new InvalidArgumentError$7("Snapshot path is required");
+			const path$4 = filePath || this.#snapshotPath;
+			if (!path$4) throw new InvalidArgumentError$7("Snapshot path is required");
 			try {
-				const data$1 = await readFile$1(resolve(path$3), "utf8");
+				const data$1 = await readFile$1(resolve(path$4), "utf8");
 				const parsed = JSON.parse(data$1);
 				if (Array.isArray(parsed)) {
 					this.#snapshots.clear();
@@ -42936,7 +42938,7 @@ var require_snapshot_recorder = /* @__PURE__ */ require_chunk.__commonJS({ "../.
 				} else this.#snapshots = new Map(Object.entries(parsed));
 			} catch (error$2) {
 				if (error$2.code === "ENOENT") this.#snapshots.clear();
-				else throw new UndiciError$1(`Failed to load snapshots from ${path$3}`, { cause: error$2 });
+				else throw new UndiciError$1(`Failed to load snapshots from ${path$4}`, { cause: error$2 });
 			}
 		}
 		/**
@@ -42946,9 +42948,9 @@ var require_snapshot_recorder = /* @__PURE__ */ require_chunk.__commonJS({ "../.
 		* @returns {Promise<void>} - Resolves when snapshots are saved
 		*/
 		async saveSnapshots(filePath) {
-			const path$3 = filePath || this.#snapshotPath;
-			if (!path$3) throw new InvalidArgumentError$7("Snapshot path is required");
-			const resolvedPath = resolve(path$3);
+			const path$4 = filePath || this.#snapshotPath;
+			if (!path$4) throw new InvalidArgumentError$7("Snapshot path is required");
+			const resolvedPath = resolve(path$4);
 			await mkdir$1(dirname$2(resolvedPath), { recursive: true });
 			const data$1 = Array.from(this.#snapshots.entries()).map(([hash, snapshot]) => ({
 				hash,
@@ -43522,11 +43524,11 @@ var require_redirect_handler = /* @__PURE__ */ require_chunk.__commonJS({ "../..
 				return;
 			}
 			const { origin, pathname, search } = util$18.parseURL(new URL(this.location, this.opts.origin && new URL(this.opts.path, this.opts.origin)));
-			const path$3 = search ? `${pathname}${search}` : pathname;
-			const redirectUrlString = `${origin}${path$3}`;
+			const path$4 = search ? `${pathname}${search}` : pathname;
+			const redirectUrlString = `${origin}${path$4}`;
 			for (const historyUrl of this.history) if (historyUrl.toString() === redirectUrlString) throw new InvalidArgumentError$4(`Redirect loop detected. Cannot redirect to ${origin}. This typically happens when using a Client or Pool with cross-origin redirects. Use an Agent for cross-origin redirects.`);
 			this.opts.headers = cleanRequestHeaders(this.opts.headers, statusCode === 303, this.opts.origin !== origin);
-			this.opts.path = path$3;
+			this.opts.path = path$4;
 			this.opts.origin = origin;
 			this.opts.query = null;
 		}
@@ -44866,17 +44868,17 @@ var require_cache_handler = /* @__PURE__ */ require_chunk.__commonJS({ "../../no
 		if (locationUrl.origin !== originUrl.origin) return;
 		return locationUrl.pathname + locationUrl.search;
 	}
-	function deleteCachedUri(store, cacheKey, path$3) {
+	function deleteCachedUri(store, cacheKey, path$4) {
 		deleteCachedValue$1(store, {
 			...cacheKey,
-			path: path$3
+			path: path$4
 		});
 		for (let i$4 = 0; i$4 < util$17.safeHTTPMethods.length; i$4++) {
 			const method = util$17.safeHTTPMethods[i$4];
 			if (method !== cacheKey.method) deleteCachedValue$1(store, {
 				...cacheKey,
 				method,
-				path: path$3
+				path: path$4
 			});
 		}
 	}
@@ -44884,8 +44886,8 @@ var require_cache_handler = /* @__PURE__ */ require_chunk.__commonJS({ "../../no
 		if (headerValue === void 0) return;
 		const values = Array.isArray(headerValue) ? headerValue : [headerValue];
 		for (let i$4 = 0; i$4 < values.length; i$4++) {
-			const path$3 = getSameOriginPath(cacheKey, values[i$4]);
-			if (path$3 !== void 0) deleteCachedUri(store, cacheKey, path$3);
+			const path$4 = getSameOriginPath(cacheKey, values[i$4]);
+			if (path$4 !== void 0) deleteCachedUri(store, cacheKey, path$4);
 		}
 	}
 	function invalidateUnsafeRequest(store, cacheKey, resHeaders) {
@@ -48890,10 +48892,10 @@ var require_fetch = /* @__PURE__ */ require_chunk.__commonJS({ "../../node_modul
 			const url$2 = requestCurrentURL(request$1);
 			/** @type {import('../../..').Agent} */
 			const agent = fetchParams.controller.dispatcher;
-			const path$3 = url$2.pathname + url$2.search;
+			const path$4 = url$2.pathname + url$2.search;
 			const hasTrailingQuestionMark = url$2.search.length === 0 && url$2.href[url$2.href.length - url$2.hash.length - 1] === "?";
 			return new Promise((resolve$3, reject) => agent.dispatch({
-				path: hasTrailingQuestionMark ? `${path$3}?` : path$3,
+				path: hasTrailingQuestionMark ? `${path$4}?` : path$4,
 				origin: url$2.origin,
 				method: request$1.method,
 				body: agent.isMockActive ? request$1.body && (request$1.body.source || request$1.body.stream) : body,
@@ -49675,9 +49677,9 @@ var require_util$4 = /* @__PURE__ */ require_chunk.__commonJS({ "../../node_modu
 	* path-value        = <any CHAR except CTLs or ";">
 	* @param {string} path
 	*/
-	function validateCookiePath(path$3) {
-		for (let i$4 = 0; i$4 < path$3.length; ++i$4) {
-			const code = path$3.charCodeAt(i$4);
+	function validateCookiePath(path$4) {
+		for (let i$4 = 0; i$4 < path$4.length; ++i$4) {
+			const code = path$4.charCodeAt(i$4);
 			if (code < 32 || code > 126 || code === 59) throw new Error("Invalid cookie path");
 		}
 	}
@@ -52847,9 +52849,9 @@ var require_undici = /* @__PURE__ */ require_chunk.__commonJS({ "../../node_modu
 			if (opts != null && typeof opts !== "object") throw new InvalidArgumentError$1("invalid opts");
 			if (opts && opts.path != null) {
 				if (typeof opts.path !== "string") throw new InvalidArgumentError$1("invalid opts.path");
-				let path$3 = opts.path;
-				if (!opts.path.startsWith("/")) path$3 = `/${path$3}`;
-				url$2 = new URL(util$11.parseOrigin(url$2).origin + path$3);
+				let path$4 = opts.path;
+				if (!opts.path.startsWith("/")) path$4 = `/${path$4}`;
+				url$2 = new URL(util$11.parseOrigin(url$2).origin + path$4);
 			} else {
 				if (!opts) opts = typeof url$2 === "object" ? url$2 : {};
 				url$2 = util$11.parseURL(url$2);
@@ -69244,8 +69246,8 @@ var require_getMachineId_linux$1 = /* @__PURE__ */ require_chunk.__commonJS({ ".
 	const fs_1$3 = require("fs");
 	const api_1$51 = (init_esm$7(), require_chunk.__toCommonJS(esm_exports$7));
 	async function getMachineId$10() {
-		for (const path$3 of ["/etc/machine-id", "/var/lib/dbus/machine-id"]) try {
-			return (await fs_1$3.promises.readFile(path$3, { encoding: "utf8" })).trim();
+		for (const path$4 of ["/etc/machine-id", "/var/lib/dbus/machine-id"]) try {
+			return (await fs_1$3.promises.readFile(path$4, { encoding: "utf8" })).trim();
 		} catch (e) {
 			api_1$51.diag.debug(`error reading machine id: ${e}`);
 		}
@@ -85514,8 +85516,8 @@ var require_getMachineId_linux = /* @__PURE__ */ require_chunk.__commonJS({ "../
 	const fs_1$1 = require("fs");
 	const api_1$12 = (init_esm$7(), require_chunk.__toCommonJS(esm_exports$7));
 	async function getMachineId$4() {
-		for (const path$3 of ["/etc/machine-id", "/var/lib/dbus/machine-id"]) try {
-			return (await fs_1$1.promises.readFile(path$3, { encoding: "utf8" })).trim();
+		for (const path$4 of ["/etc/machine-id", "/var/lib/dbus/machine-id"]) try {
+			return (await fs_1$1.promises.readFile(path$4, { encoding: "utf8" })).trim();
 		} catch (e) {
 			api_1$12.diag.debug(`error reading machine id: ${e}`);
 		}
@@ -103852,7 +103854,7 @@ function appendRootPathToUrlIfNeeded(url$2) {
 		return;
 	}
 }
-function appendResourcePathToUrl(url$2, path$3) {
+function appendResourcePathToUrl(url$2, path$4) {
 	try {
 		new URL(url$2);
 	} catch (_a$4) {
@@ -103860,11 +103862,11 @@ function appendResourcePathToUrl(url$2, path$3) {
 		return;
 	}
 	if (!url$2.endsWith("/")) url$2 = url$2 + "/";
-	url$2 += path$3;
+	url$2 += path$4;
 	try {
 		new URL(url$2);
 	} catch (_b) {
-		diag.warn("Configuration: Provided URL appended with '" + path$3 + "' is not a valid URL, using 'undefined' instead of '" + url$2 + "'");
+		diag.warn("Configuration: Provided URL appended with '" + path$4 + "' is not a valid URL, using 'undefined' instead of '" + url$2 + "'");
 		return;
 	}
 	return url$2;
@@ -105870,41 +105872,41 @@ var require_windows = __commonJS({ "__mcpc__core_latest/node_modules/isexe/windo
 	module$3.exports = isexe;
 	isexe.sync = sync;
 	var fs$3 = __require("fs");
-	function checkPathExt(path$3, options) {
+	function checkPathExt(path$4, options) {
 		var pathext = options.pathExt !== void 0 ? options.pathExt : process.env.PATHEXT;
 		if (!pathext) return true;
 		pathext = pathext.split(";");
 		if (pathext.indexOf("") !== -1) return true;
 		for (var i$4 = 0; i$4 < pathext.length; i$4++) {
 			var p2 = pathext[i$4].toLowerCase();
-			if (p2 && path$3.substr(-p2.length).toLowerCase() === p2) return true;
+			if (p2 && path$4.substr(-p2.length).toLowerCase() === p2) return true;
 		}
 		return false;
 	}
-	function checkStat(stat, path$3, options) {
+	function checkStat(stat, path$4, options) {
 		if (!stat.isSymbolicLink() && !stat.isFile()) return false;
-		return checkPathExt(path$3, options);
+		return checkPathExt(path$4, options);
 	}
-	function isexe(path$3, options, cb) {
-		fs$3.stat(path$3, function(er, stat) {
-			cb(er, er ? false : checkStat(stat, path$3, options));
+	function isexe(path$4, options, cb) {
+		fs$3.stat(path$4, function(er, stat) {
+			cb(er, er ? false : checkStat(stat, path$4, options));
 		});
 	}
-	function sync(path$3, options) {
-		return checkStat(fs$3.statSync(path$3), path$3, options);
+	function sync(path$4, options) {
+		return checkStat(fs$3.statSync(path$4), path$4, options);
 	}
 } });
 var require_mode = __commonJS({ "__mcpc__core_latest/node_modules/isexe/mode.js"(exports$1, module$3) {
 	module$3.exports = isexe;
 	isexe.sync = sync;
 	var fs$3 = __require("fs");
-	function isexe(path$3, options, cb) {
-		fs$3.stat(path$3, function(er, stat) {
+	function isexe(path$4, options, cb) {
+		fs$3.stat(path$4, function(er, stat) {
 			cb(er, er ? false : checkStat(stat, options));
 		});
 	}
-	function sync(path$3, options) {
-		return checkStat(fs$3.statSync(path$3), options);
+	function sync(path$4, options) {
+		return checkStat(fs$3.statSync(path$4), options);
 	}
 	function checkStat(stat, options) {
 		return stat.isFile() && checkMode(stat, options);
@@ -105929,7 +105931,7 @@ var require_isexe = __commonJS({ "__mcpc__core_latest/node_modules/isexe/index.j
 	else core$1 = require_mode();
 	module$3.exports = isexe;
 	isexe.sync = sync;
-	function isexe(path$3, options, cb) {
+	function isexe(path$4, options, cb) {
 		if (typeof options === "function") {
 			cb = options;
 			options = {};
@@ -105937,13 +105939,13 @@ var require_isexe = __commonJS({ "__mcpc__core_latest/node_modules/isexe/index.j
 		if (!cb) {
 			if (typeof Promise !== "function") throw new TypeError("callback not provided");
 			return new Promise(function(resolve$3, reject) {
-				isexe(path$3, options || {}, function(er, is$3) {
+				isexe(path$4, options || {}, function(er, is$3) {
 					if (er) reject(er);
 					else resolve$3(is$3);
 				});
 			});
 		}
-		core$1(path$3, options || {}, function(er, is$3) {
+		core$1(path$4, options || {}, function(er, is$3) {
 			if (er) {
 				if (er.code === "EACCES" || options && options.ignoreErrors) {
 					er = null;
@@ -105953,9 +105955,9 @@ var require_isexe = __commonJS({ "__mcpc__core_latest/node_modules/isexe/index.j
 			cb(er, is$3);
 		});
 	}
-	function sync(path$3, options) {
+	function sync(path$4, options) {
 		try {
-			return core$1.sync(path$3, options || {});
+			return core$1.sync(path$4, options || {});
 		} catch (er) {
 			if (options && options.ignoreErrors || er.code === "EACCES") return false;
 			else throw er;
@@ -105964,7 +105966,7 @@ var require_isexe = __commonJS({ "__mcpc__core_latest/node_modules/isexe/index.j
 } });
 var require_which = __commonJS({ "__mcpc__core_latest/node_modules/which/which.js"(exports$1, module$3) {
 	var isWindows = process.platform === "win32" || process.env.OSTYPE === "cygwin" || process.env.OSTYPE === "msys";
-	var path$3 = __require("path");
+	var path$4 = __require("path");
 	var COLON$1 = isWindows ? ";" : ":";
 	var isexe = require_isexe();
 	var getNotFoundError = (cmd) => Object.assign(/* @__PURE__ */ new Error(`not found: ${cmd}`), { code: "ENOENT" });
@@ -105994,7 +105996,7 @@ var require_which = __commonJS({ "__mcpc__core_latest/node_modules/which/which.j
 			if (i$4 === pathEnv.length) return opt.all && found.length ? resolve$3(found) : reject(getNotFoundError(cmd));
 			const ppRaw = pathEnv[i$4];
 			const pathPart = /^".*"$/.test(ppRaw) ? ppRaw.slice(1, -1) : ppRaw;
-			const pCmd = path$3.join(pathPart, cmd);
+			const pCmd = path$4.join(pathPart, cmd);
 			resolve$3(subStep(!pathPart && /^\.[\\\/]/.test(cmd) ? cmd.slice(0, 2) + pCmd : pCmd, i$4, 0));
 		});
 		const subStep = (p2, i$4, ii) => new Promise((resolve$3, reject) => {
@@ -106015,7 +106017,7 @@ var require_which = __commonJS({ "__mcpc__core_latest/node_modules/which/which.j
 		for (let i$4 = 0; i$4 < pathEnv.length; i$4++) {
 			const ppRaw = pathEnv[i$4];
 			const pathPart = /^".*"$/.test(ppRaw) ? ppRaw.slice(1, -1) : ppRaw;
-			const pCmd = path$3.join(pathPart, cmd);
+			const pCmd = path$4.join(pathPart, cmd);
 			const p2 = !pathPart && /^\.[\\\/]/.test(cmd) ? cmd.slice(0, 2) + pCmd : pCmd;
 			for (let j = 0; j < pathExt.length; j++) {
 				const cur = p2 + pathExt[j];
@@ -106042,7 +106044,7 @@ var require_path_key = __commonJS({ "__mcpc__core_latest/node_modules/path-key/i
 	module$3.exports.default = pathKey;
 } });
 var require_resolveCommand = __commonJS({ "__mcpc__core_latest/node_modules/cross-spawn/lib/util/resolveCommand.js"(exports$1, module$3) {
-	var path$3 = __require("path");
+	var path$4 = __require("path");
 	var which = require_which();
 	var getPathKey = require_path_key();
 	function resolveCommandAttempt(parsed, withoutPathExt) {
@@ -106057,12 +106059,12 @@ var require_resolveCommand = __commonJS({ "__mcpc__core_latest/node_modules/cros
 		try {
 			resolved = which.sync(parsed.command, {
 				path: env[getPathKey({ env })],
-				pathExt: withoutPathExt ? path$3.delimiter : void 0
+				pathExt: withoutPathExt ? path$4.delimiter : void 0
 			});
 		} catch (e) {} finally {
 			if (shouldSwitchCwd) process.chdir(cwd2);
 		}
-		if (resolved) resolved = path$3.resolve(hasCustomCwd ? parsed.options.cwd : "", resolved);
+		if (resolved) resolved = path$4.resolve(hasCustomCwd ? parsed.options.cwd : "", resolved);
 		return resolved;
 	}
 	function resolveCommand(parsed) {
@@ -106096,8 +106098,8 @@ var require_shebang_command = __commonJS({ "__mcpc__core_latest/node_modules/she
 	module$3.exports = (string4 = "") => {
 		const match = string4.match(shebangRegex);
 		if (!match) return null;
-		const [path$3, argument] = match[0].replace(/#! ?/, "").split(" ");
-		const binary = path$3.split("/").pop();
+		const [path$4, argument] = match[0].replace(/#! ?/, "").split(" ");
+		const binary = path$4.split("/").pop();
 		if (binary === "env") return argument;
 		return argument ? `${binary} ${argument}` : binary;
 	};
@@ -106119,7 +106121,7 @@ var require_readShebang = __commonJS({ "__mcpc__core_latest/node_modules/cross-s
 	module$3.exports = readShebang;
 } });
 var require_parse = __commonJS({ "__mcpc__core_latest/node_modules/cross-spawn/lib/parse.js"(exports$1, module$3) {
-	var path$3 = __require("path");
+	var path$4 = __require("path");
 	var resolveCommand = require_resolveCommand();
 	var escape$1 = require_escape();
 	var readShebang = require_readShebang();
@@ -106142,7 +106144,7 @@ var require_parse = __commonJS({ "__mcpc__core_latest/node_modules/cross-spawn/l
 		const needsShell = !isExecutableRegExp.test(commandFile);
 		if (parsed.options.forceShell || needsShell) {
 			const needsDoubleEscapeMetaChars = isCmdShimRegExp.test(commandFile);
-			parsed.command = path$3.normalize(parsed.command);
+			parsed.command = path$4.normalize(parsed.command);
 			parsed.command = escape$1.command(parsed.command);
 			parsed.args = parsed.args.map((arg) => escape$1.argument(arg, needsDoubleEscapeMetaChars));
 			parsed.args = [
@@ -106403,9 +106405,9 @@ function assignProp(target, prop$1, value) {
 		configurable: true
 	});
 }
-function getElementAtPath(obj, path$3) {
-	if (!path$3) return obj;
-	return path$3.reduce((acc, key$1) => acc?.[key$1], obj);
+function getElementAtPath(obj, path$4) {
+	if (!path$4) return obj;
+	return path$4.reduce((acc, key$1) => acc?.[key$1], obj);
 }
 function promiseAllObject(promisesObj) {
 	const keys = Object.keys(promisesObj);
@@ -106668,11 +106670,11 @@ function aborted(x, startIndex = 0) {
 	for (let i$4 = startIndex; i$4 < x.issues.length; i$4++) if (x.issues[i$4]?.continue !== true) return true;
 	return false;
 }
-function prefixIssues(path$3, issues) {
+function prefixIssues(path$4, issues) {
 	return issues.map((iss) => {
 		var _a$4;
 		(_a$4 = iss).path ?? (_a$4.path = []);
-		iss.path.unshift(path$3);
+		iss.path.unshift(path$4);
 		return iss;
 	});
 }
@@ -116237,17 +116239,17 @@ function checkCircularDependencies(plugins) {
 	const errors$1 = [];
 	const pluginMap = /* @__PURE__ */ new Map();
 	for (const plugin of plugins) pluginMap.set(plugin.name, plugin);
-	function checkCircular(pluginName, visited, path$3) {
+	function checkCircular(pluginName, visited, path$4) {
 		if (visited.has(pluginName)) {
-			const cycle = [...path$3, pluginName].join(" -> ");
+			const cycle = [...path$4, pluginName].join(" -> ");
 			errors$1.push(`Circular dependency detected: ${cycle}`);
 			return;
 		}
 		const plugin = pluginMap.get(pluginName);
 		if (!plugin || !plugin.dependencies) return;
 		visited.add(pluginName);
-		path$3.push(pluginName);
-		for (const dep of plugin.dependencies) checkCircular(dep, new Set(visited), [...path$3]);
+		path$4.push(pluginName);
+		for (const dep of plugin.dependencies) checkCircular(dep, new Set(visited), [...path$4]);
 	}
 	for (const plugin of plugins) checkCircular(plugin.name, /* @__PURE__ */ new Set(), []);
 	return errors$1;
@@ -117517,7 +117519,7 @@ Returns: array of element contexts (max 50).`,
 	},
 	update_inspection_status: {
 		name: "update_inspection_status",
-		description: "Update inspection status. Parameters: inspectionId (optional, auto-detects), status ('in-progress'|'completed'|'failed'|'deleted'), message (required for completed/failed).",
+		description: "Update inspection status. Parameters: inspectionId (optional, auto-detects), status ('in-progress'|'completed'|'failed'|'deleted'), message (required for completed/failed). Before 'completed', call review_code_quality and fix what it reports.",
 		inputSchema: {
 			type: "object",
 			properties: {
@@ -117585,6 +117587,18 @@ Returns: array of element contexts (max 50).`,
 			properties: { stdioid: {
 				type: "number",
 				description: "Stdio ID from list to get full details."
+			} }
+		}
+	},
+	review_code_quality: {
+		name: "review_code_quality",
+		description: `Quality gate — call after editing code and before reporting the work as done or marking an inspection completed. Type-checks and lints the files you changed (git diff vs HEAD, or the files you pass) and returns errors in those files only, plus a review checklist (React performance, component composition, accessibility/UI, SOLID & clean code, security) with paths to the full rule files. Fix every reported error and every 🔴 blocking checklist violation in your changes, then call again until it reports PASS.`,
+		inputSchema: {
+			type: "object",
+			properties: { files: {
+				type: "array",
+				items: { type: "string" },
+				description: "Optional. Files to check, relative to the project root. Defaults to all changed source files."
 			} }
 		}
 	},
@@ -117858,6 +117872,284 @@ function getStdioText(stdioid) {
 }
 
 //#endregion
+//#region src/mcp-quality.ts
+const SOURCE_FILE = /\.(ts|tsx|mts|cts|js|jsx|mjs|cjs)$/;
+const TS_FILE = /\.(ts|tsx|mts|cts)$/;
+const REACT_FILE = /\.(tsx|jsx)$/;
+const IGNORED_DIR = /(^|\/)(node_modules|dist|dist-[a-z]+|build|out|coverage|\.next|\.nuxt|\.svelte-kit|\.claude)\//;
+const ESLINT_CONFIGS = [
+	"eslint.config.js",
+	"eslint.config.mjs",
+	"eslint.config.cjs",
+	"eslint.config.ts",
+	".eslintrc.js",
+	".eslintrc.cjs",
+	".eslintrc.json",
+	".eslintrc.yml",
+	".eslintrc.yaml",
+	".eslintrc"
+];
+const COMMAND_TIMEOUT_MS = 18e4;
+const MAX_LISTED_ERRORS = 50;
+function run(cmd, args, cwd$1) {
+	return new Promise((resolve$3) => {
+		(0, node_child_process.execFile)(cmd, args, {
+			cwd: cwd$1,
+			timeout: COMMAND_TIMEOUT_MS,
+			maxBuffer: 32 * 1024 * 1024
+		}, (error$2, stdout, stderr) => {
+			resolve$3({
+				code: error$2 ? typeof error$2.code === "number" ? error$2.code : 1 : 0,
+				output: `${stdout}${stderr}`
+			});
+		});
+	});
+}
+/** Walks up from `startDir` to `root` (inclusive) and returns the first existing candidate. */
+function findUp(startDir, root$2, candidates) {
+	let dir = startDir;
+	while (true) {
+		for (const name$1 of candidates) {
+			const candidate = node_path.default.join(dir, name$1);
+			if ((0, node_fs.existsSync)(candidate)) return candidate;
+		}
+		if (dir === root$2 || dir === node_path.default.dirname(dir)) return null;
+		dir = node_path.default.dirname(dir);
+	}
+}
+const findBin = (startDir, root$2, bin) => findUp(startDir, root$2, [node_path.default.join("node_modules", ".bin", bin)]);
+/** Groups files by a key; files whose key is null are dropped. */
+function groupBy(files, keyOf) {
+	const groups = /* @__PURE__ */ new Map();
+	for (const file of files) {
+		const key$1 = keyOf(file);
+		if (!key$1) continue;
+		groups.set(key$1, [...groups.get(key$1) ?? [], file]);
+	}
+	return groups;
+}
+async function projectRoot() {
+	const { code, output } = await run("git", ["rev-parse", "--show-toplevel"], process.cwd());
+	return code === 0 ? output.trim() : process.cwd();
+}
+async function changedFiles(root$2) {
+	const [diff$2, untracked] = await Promise.all([run("git", [
+		"diff",
+		"--name-only",
+		"HEAD"
+	], root$2), run("git", [
+		"ls-files",
+		"--others",
+		"--exclude-standard"
+	], root$2)]);
+	const lines = [diff$2, untracked].filter((r) => r.code === 0).flatMap((r) => r.output.split("\n")).map((line$1) => line$1.trim()).filter((line$1) => SOURCE_FILE.test(line$1) && !IGNORED_DIR.test(line$1));
+	return [...new Set(lines)].sort();
+}
+/**
+* Configs to type-check for a tsconfig. A "solution" tsconfig (Vite's default:
+* `files: []` plus `references`) checks nothing itself with `tsc -p`, so its
+* referenced configs are checked instead.
+*/
+async function configsToCheck(tsc, config$1) {
+	const { code, output } = await run(tsc, [
+		"--showConfig",
+		"-p",
+		config$1
+	], node_path.default.dirname(config$1));
+	if (code !== 0) return [config$1];
+	try {
+		const resolved = JSON.parse(output);
+		if (!(resolved.references?.length && !resolved.files?.length && !resolved.include?.length)) return [config$1];
+		return resolved.references.map((ref) => {
+			const target = node_path.default.resolve(node_path.default.dirname(config$1), ref.path);
+			return target.endsWith(".json") ? target : node_path.default.join(target, "tsconfig.json");
+		});
+	} catch {
+		return [config$1];
+	}
+}
+/** Type-checks each changed TS file against its nearest tsconfig; reports only errors in changed files. */
+async function typeCheck(root$2, files) {
+	const tsFiles = files.filter((f) => TS_FILE.test(f));
+	if (tsFiles.length === 0) return {
+		status: "SKIPPED",
+		summary: "no TypeScript files changed"
+	};
+	const byConfig = groupBy(tsFiles, (f) => findUp(node_path.default.dirname(node_path.default.join(root$2, f)), root$2, ["tsconfig.json"]));
+	if (byConfig.size === 0) return {
+		status: "SKIPPED",
+		summary: "no tsconfig.json found"
+	};
+	const changed = new Set(tsFiles);
+	const errors$1 = [];
+	let ignored = 0;
+	for (const nearest of byConfig.keys()) {
+		const tsc = findBin(node_path.default.dirname(nearest), root$2, "tsc");
+		if (!tsc) return {
+			status: "SKIPPED",
+			summary: "TypeScript (tsc) is not installed"
+		};
+		for (const config$1 of await configsToCheck(tsc, nearest)) {
+			const args = [
+				"--noEmit",
+				"--pretty",
+				"false",
+				"-p",
+				config$1
+			];
+			let { output } = await run(tsc, args, root$2);
+			if (output.includes("TS5103")) ({output} = await run(tsc, [
+				...args,
+				"--ignoreDeprecations",
+				"5.0"
+			], root$2));
+			for (const line$1 of output.split("\n")) {
+				if (!line$1.includes("error TS")) continue;
+				const match = line$1.match(/^(.+?)\(\d+,\d+\): error TS/);
+				if (!match) return {
+					status: "FAIL",
+					summary: "tsc could not run",
+					details: line$1
+				};
+				if (changed.has(node_path.default.relative(root$2, node_path.default.resolve(root$2, match[1])))) errors$1.push(line$1);
+				else ignored++;
+			}
+		}
+	}
+	const ignoredNote = ignored ? ` (${ignored} pre-existing errors in other files ignored)` : "";
+	return errors$1.length ? {
+		status: "FAIL",
+		summary: `${errors$1.length} error(s) in changed files${ignoredNote}`,
+		details: errors$1.slice(0, MAX_LISTED_ERRORS).join("\n")
+	} : {
+		status: "PASS",
+		summary: `no errors in changed files${ignoredNote}`
+	};
+}
+/** Lints with the project's ESLint when it has a config, otherwise oxlint if installed. */
+async function lint(root$2, files) {
+	const existing = files.filter((f) => (0, node_fs.existsSync)(node_path.default.join(root$2, f)));
+	if (existing.length === 0) return {
+		status: "SKIPPED",
+		summary: "no files to lint"
+	};
+	const byEslintConfig = groupBy(existing, (f) => findUp(node_path.default.dirname(node_path.default.join(root$2, f)), root$2, ESLINT_CONFIGS));
+	if (byEslintConfig.size > 0) {
+		const outputs = [];
+		let failed = false;
+		for (const [config$1, group] of byEslintConfig) {
+			const dir = node_path.default.dirname(config$1);
+			const eslint = findBin(dir, root$2, "eslint");
+			if (!eslint) continue;
+			const { code, output } = await run(eslint, group.map((f) => node_path.default.join(root$2, f)), dir);
+			if (code === 2) return {
+				status: "SKIPPED",
+				summary: "ESLint failed to run",
+				details: output.trim()
+			};
+			if (code !== 0) failed = true;
+			if (output.trim()) outputs.push(output.trim());
+		}
+		if (outputs.length || failed) return {
+			status: failed ? "FAIL" : "PASS",
+			summary: failed ? "ESLint errors" : "ESLint warnings only",
+			details: outputs.join("\n")
+		};
+		return {
+			status: "PASS",
+			summary: "ESLint: no problems"
+		};
+	}
+	const oxlint = findBin(root$2, root$2, "oxlint");
+	if (oxlint) {
+		const { code, output } = await run(oxlint, existing, root$2);
+		return code === 0 ? {
+			status: "PASS",
+			summary: "oxlint: no errors",
+			details: output.trim() || void 0
+		} : {
+			status: "FAIL",
+			summary: "oxlint errors",
+			details: output.trim()
+		};
+	}
+	return {
+		status: "SKIPPED",
+		summary: "no linter (ESLint config or oxlint) found"
+	};
+}
+/** Locates the bundled quality-rules folder from both src/ and dist/ builds. */
+function rulesDir() {
+	const here = node_path.default.dirname((0, node_url.fileURLToPath)(require("url").pathToFileURL(__filename).href));
+	return [node_path.default.resolve(here, "../quality-rules"), node_path.default.resolve(here, "../../quality-rules")].find((dir) => (0, node_fs.existsSync)(dir)) ?? null;
+}
+function checklist(files) {
+	const hasReact = files.some((f) => REACT_FILE.test(f));
+	const sections = [];
+	if (hasReact) {
+		sections.push(`### React (react-best-practices, composition-patterns)
+- 🔴 Hooks: no conditional hooks; effect dependencies complete; every listener/interval/subscription cleaned up in the effect's return.
+- 🔴 Don't define components inside components (\`rerender-no-inline-components\`).
+- 🟡 Derive state during render instead of syncing it in effects (\`rerender-derived-state-no-effect\`); functional setState for updates based on the previous value.
+- 🟡 Independent awaits run in parallel with \`Promise.all\` (\`async-parallel\`); heavy components loaded lazily (\`bundle-dynamic-imports\`).
+- 🟡 Conditional rendering with a ternary, not \`count && <X/>\` (\`rendering-conditional-render\`).
+- 🟡 No boolean props that switch behavior — use explicit variants or composition (\`architecture-avoid-boolean-props\`); children over render props.
+- 🟡 One responsibility per component; move non-UI logic into hooks; split components that grow past ~200 lines.`);
+		sections.push(`### UI & accessibility (web-design-guidelines)
+- 🔴 Actions use \`<button>\`, navigation uses \`<a>\` — no \`<div onClick>\`; icon-only buttons have \`aria-label\`; form controls have labels; images have \`alt\`.
+- 🔴 Visible keyboard focus — never \`outline: none\` without a \`:focus-visible\` replacement.
+- 🟡 Async messages (toasts, errors) use \`aria-live\`; animations honor \`prefers-reduced-motion\`; no \`transition: all\`.
+- 🟡 Long text truncates or wraps; empty states handled; loading text ends with "…".`);
+	}
+	sections.push(`### Design & clean code (code-quality, code-review-skill)
+- 🟡 SOLID: single responsibility; extend through maps/strategies instead of growing type-switches; depend on injected abstractions, not concrete singletons; narrow props/interfaces.
+- 🟡 Functions under ~50 lines, cyclomatic complexity under 10, nesting ≤ 3; more than 4 parameters → an options object.
+- 🟡 Reuse existing helpers instead of duplicating logic; descriptive names; no magic numbers.
+- 🟢 No \`any\`; no leftover \`console.log\`; TODOs reference a ticket.`);
+	sections.push(`### Correctness & security (code-review-skill)
+- 🔴 No unsanitized HTML (\`dangerouslySetInnerHTML\`, \`innerHTML\`) from user or remote data; no secrets in client code; validate external input.
+- 🔴 Every promise awaited or handled; async errors reach the user or a log; no state updates after unmount (abort in-flight requests).
+- 🟡 Edge cases: empty/null data, failed requests, double submissions, race conditions.`);
+	return sections.join("\n\n");
+}
+function rulesIndex(dir) {
+	const p$1 = (rel) => node_path.default.join(dir, rel);
+	return `Open a rule file when a checklist item is unclear or you suspect a violation:
+- React performance — ${p$1("react-best-practices/SKILL.md")} (one file per rule in ${p$1("react-best-practices/rules/")})
+- Component composition — ${p$1("composition-patterns/SKILL.md")} (rules in ${p$1("composition-patterns/rules/")})
+- UI & accessibility — ${p$1("web-design-guidelines/guidelines.md")}
+- Review guides — ${p$1("code-review/reference/")} (react.md, typescript.md, architecture-review-guide.md, security-review-guide.md, code-quality-universal.md)
+- SOLID & clean code — ${p$1("code-quality/SKILL.md")}`;
+}
+function formatCheck(title, result) {
+	const body = result.details ? `\n\`\`\`\n${result.details}\n\`\`\`` : "";
+	return `## ${title}: ${result.status} — ${result.summary}${body}`;
+}
+async function reviewCodeQuality(requested) {
+	const root$2 = await projectRoot();
+	const files = requested?.length ? requested.map((f) => node_path.default.relative(root$2, node_path.default.resolve(root$2, f))).filter((f) => SOURCE_FILE.test(f)) : await changedFiles(root$2);
+	if (files.length === 0) return "# Code quality review: nothing to check\nNo changed source files (git diff vs HEAD is empty). If you edited files outside git, pass them in `files`.";
+	const [types$1, lintResult] = await Promise.all([typeCheck(root$2, files), lint(root$2, files)]);
+	const automatedFailed = types$1.status === "FAIL" || lintResult.status === "FAIL";
+	const dir = rulesDir();
+	return [
+		`# Code quality review — automated checks ${automatedFailed ? "FAIL" : "PASS"}`,
+		`Project: ${root$2}\nChanged files (${files.length}):\n${files.map((f) => `- ${f}`).join("\n")}`,
+		formatCheck("Type-check", types$1),
+		formatCheck("Lint", lintResult),
+		`## Review checklist — apply to the lines you changed\n🔴 must fix · 🟡 should fix · 🟢 nit. Don't flag untouched pre-existing code.\n\n${checklist(files)}`,
+		dir ? `## Full rules\n${rulesIndex(dir)}` : "",
+		automatedFailed ? "## Result: FAIL\nFix the errors above in the changed files, then call review_code_quality again. Do not report the work as done yet." : "## Result: automated checks PASS\nNow review your changes against the checklist. Fix every 🔴 violation (and 🟡 unless there is a reason not to), then call review_code_quality again if you changed code. Only then report done — and say briefly what the review found."
+	].filter(Boolean).join("\n\n");
+}
+function registerQualityTool(mcpServer) {
+	mcpServer.tool(TOOL_SCHEMAS.review_code_quality.name, TOOL_SCHEMAS.review_code_quality.description, TOOL_SCHEMAS.review_code_quality.inputSchema, async ({ files }) => ({ content: [{
+		type: "text",
+		text: await reviewCodeQuality(files)
+	}] }));
+}
+
+//#endregion
 //#region src/mcp.ts
 function textMessage(text$2) {
 	return { messages: [{
@@ -117924,6 +118216,7 @@ async function createInspectorMcpServer(serverContext) {
 		registerNativeConsoleTool(mcpServer);
 	}
 	registerStdioTool(mcpServer);
+	registerQualityTool(mcpServer);
 	const mcpClientExecServer = createClientExecServer(mcpServer, "inspector");
 	mcpClientExecServer.registerClientToolSchemas([
 		TOOL_SCHEMAS.capture_element_context,
@@ -119583,10 +119876,10 @@ const EDITORS = {
 		format: "servers"
 	}
 };
-function resolvePath(path$3, root$2) {
-	if (path$3.startsWith("/")) return path$3;
-	if (path$3.startsWith("~")) return (0, path.join)(HOME_DIR, path$3.slice(1));
-	return (0, path.join)(root$2, path$3);
+function resolvePath(path$4, root$2) {
+	if (path$4.startsWith("/")) return path$4;
+	if (path$4.startsWith("~")) return (0, path.join)(HOME_DIR, path$4.slice(1));
+	return (0, path.join)(root$2, path$4);
 }
 /** Find directory by walking up from root (for monorepo support) */
 function findUpDir(name$1, from) {

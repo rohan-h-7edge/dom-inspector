@@ -84,8 +84,8 @@ export function buildInspectionPrompt(item: InspectionItem): string {
   return `${output}
 
 ## Your Task
-This is inspection \`${item.id}\`. After investigating, call \`update_inspection_status\` with inspectionId: "${item.id}":
-- status: "completed" — ONLY if you actually edited code to make this change. Include a short message describing what you changed.
+This is inspection \`${item.id}\`. If you edit code, first call \`review_code_quality\` and fix every type/lint error and 🔴 checklist item it reports in your changes, calling it again until it passes. Then call \`update_inspection_status\` with inspectionId: "${item.id}":
+- status: "completed" — ONLY if you actually edited code to make this change and review_code_quality passed. Include a short message describing what you changed.
 - status: "failed" — if you made NO code changes for any reason, including deciding the change wasn't needed, was already done, or wasn't possible. Include a short message explaining why. Never mark "completed" without a real code edit.`;
 }
 

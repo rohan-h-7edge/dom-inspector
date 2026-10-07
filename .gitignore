@@ -8,3 +8,6 @@ dist-electron/
 .serverless/
 dist-lambda/
 dist-hub/
+
+# verify-quality skill: local pass marker
+.claude/.quality-verified

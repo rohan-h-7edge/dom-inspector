@@ -68,7 +68,7 @@ Returns: array of element contexts (max 50).`,
   update_inspection_status: {
     name: "update_inspection_status",
     description:
-      "Update inspection status. Parameters: inspectionId (optional, auto-detects), status ('in-progress'|'completed'|'failed'|'deleted'), message (required for completed/failed).",
+      "Update inspection status. Parameters: inspectionId (optional, auto-detects), status ('in-progress'|'completed'|'failed'|'deleted'), message (required for completed/failed). Before 'completed', call review_code_quality and fix what it reports.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -143,6 +143,22 @@ Returns: array of element contexts (max 50).`,
         stdioid: {
           type: "number",
           description: "Stdio ID from list to get full details.",
+        },
+      },
+    },
+  },
+
+  review_code_quality: {
+    name: "review_code_quality",
+    description: `Quality gate — call after editing code and before reporting the work as done or marking an inspection completed. Type-checks and lints the files you changed (git diff vs HEAD, or the files you pass) and returns errors in those files only, plus a review checklist (React performance, component composition, accessibility/UI, SOLID & clean code, security) with paths to the full rule files. Fix every reported error and every 🔴 blocking checklist violation in your changes, then call again until it reports PASS.`,
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        files: {
+          type: "array",
+          items: { type: "string" },
+          description:
+            "Optional. Files to check, relative to the project root. Defaults to all changed source files.",
         },
       },
     },

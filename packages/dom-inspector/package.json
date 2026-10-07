@@ -1,6 +1,6 @@
 {
   "name": "dom-inspector-mcp",
-  "version": "0.1.50",
+  "version": "0.1.51",
   "description": "Universal DOM inspector plugin for React/Vue - inspect component sources and API calls in any bundler",
   "type": "module",
   "license": "MIT",

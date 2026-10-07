@@ -117987,6 +117987,40 @@ async function configsToCheck(tsc, config$1) {
 		return [config$1];
 	}
 }
+async function runTsc(tsc, config$1, root$2) {
+	const args = [
+		"--noEmit",
+		"--pretty",
+		"false",
+		"-p",
+		config$1
+	];
+	const { output } = await run(tsc, args, root$2);
+	if (!output.includes("TS5103")) return output;
+	return (await run(tsc, [
+		...args,
+		"--ignoreDeprecations",
+		"5.0"
+	], root$2)).output;
+}
+/** Splits tsc output into errors in changed files, a count of other errors, and a fatal (file-less) error. */
+function classifyTscOutput(output, changed, root$2) {
+	const inChanged = [];
+	let ignored = 0;
+	let fatal = null;
+	for (const line$1 of output.split("\n")) {
+		if (!line$1.includes("error TS")) continue;
+		const match = line$1.match(/^(.+?)\(\d+,\d+\): error TS/);
+		if (!match) fatal ??= line$1.includes("TS18003") ? null : line$1;
+		else if (changed.has(path$1.relative(root$2, path$1.resolve(root$2, match[1])))) inChanged.push(line$1);
+		else ignored++;
+	}
+	return {
+		inChanged,
+		ignored,
+		fatal
+	};
+}
 /** Type-checks each changed TS file against its nearest tsconfig; reports only errors in changed files. */
 async function typeCheck(root$2, files) {
 	const tsFiles = files.filter((f) => TS_FILE.test(f));
@@ -118009,30 +118043,14 @@ async function typeCheck(root$2, files) {
 			summary: "TypeScript (tsc) is not installed"
 		};
 		for (const config$1 of await configsToCheck(tsc, nearest)) {
-			const args = [
-				"--noEmit",
-				"--pretty",
-				"false",
-				"-p",
-				config$1
-			];
-			let { output } = await run(tsc, args, root$2);
-			if (output.includes("TS5103")) ({output} = await run(tsc, [
-				...args,
-				"--ignoreDeprecations",
-				"5.0"
-			], root$2));
-			for (const line$1 of output.split("\n")) {
-				if (!line$1.includes("error TS")) continue;
-				const match = line$1.match(/^(.+?)\(\d+,\d+\): error TS/);
-				if (!match) return {
-					status: "FAIL",
-					summary: "tsc could not run",
-					details: line$1
-				};
-				if (changed.has(path$1.relative(root$2, path$1.resolve(root$2, match[1])))) errors$1.push(line$1);
-				else ignored++;
-			}
+			const result = classifyTscOutput(await runTsc(tsc, config$1, root$2), changed, root$2);
+			if (result.fatal) return {
+				status: "FAIL",
+				summary: "tsc could not run",
+				details: result.fatal
+			};
+			errors$1.push(...result.inChanged);
+			ignored += result.ignored;
 		}
 	}
 	const ignoredNote = ignored ? ` (${ignored} pre-existing errors in other files ignored)` : "";
@@ -118053,22 +118071,24 @@ async function lint(root$2, files) {
 		summary: "no files to lint"
 	};
 	const byEslintConfig = groupBy(existing, (f) => findUp(path$1.dirname(path$1.join(root$2, f)), root$2, ESLINT_CONFIGS));
-	if (byEslintConfig.size > 0) {
-		const outputs = [];
-		let failed = false;
-		for (const [config$1, group] of byEslintConfig) {
-			const dir = path$1.dirname(config$1);
-			const eslint = findBin(dir, root$2, "eslint");
-			if (!eslint) continue;
-			const { code, output } = await run(eslint, group.map((f) => path$1.join(root$2, f)), dir);
-			if (code === 2) return {
-				status: "SKIPPED",
-				summary: "ESLint failed to run",
-				details: output.trim()
-			};
-			if (code !== 0) failed = true;
-			if (output.trim()) outputs.push(output.trim());
-		}
+	const outputs = [];
+	let failed = false;
+	let eslintRan = false;
+	for (const [config$1, group] of byEslintConfig) {
+		const dir = path$1.dirname(config$1);
+		const eslint = findBin(dir, root$2, "eslint");
+		if (!eslint) continue;
+		eslintRan = true;
+		const { code, output } = await run(eslint, group.map((f) => path$1.join(root$2, f)), dir);
+		if (code === 2) return {
+			status: "SKIPPED",
+			summary: "ESLint failed to run",
+			details: output.trim()
+		};
+		if (code !== 0) failed = true;
+		if (output.trim()) outputs.push(output.trim());
+	}
+	if (eslintRan) {
 		if (outputs.length || failed) return {
 			status: failed ? "FAIL" : "PASS",
 			summary: failed ? "ESLint errors" : "ESLint warnings only",
@@ -118081,7 +118101,7 @@ async function lint(root$2, files) {
 	}
 	const oxlint = findBin(root$2, root$2, "oxlint");
 	if (oxlint) {
-		const { code, output } = await run(oxlint, existing, root$2);
+		const { code, output } = await run(oxlint, existing.map((f) => `./${f}`), root$2);
 		return code === 0 ? {
 			status: "PASS",
 			summary: "oxlint: no errors",
@@ -118146,7 +118166,7 @@ function formatCheck(title, result) {
 }
 async function reviewCodeQuality(requested) {
 	const root$2 = await projectRoot();
-	const files = requested?.length ? requested.map((f) => path$1.relative(root$2, path$1.resolve(root$2, f))).filter((f) => SOURCE_FILE.test(f)) : await changedFiles(root$2);
+	const files = requested?.length ? requested.map((f) => path$1.relative(root$2, path$1.resolve(root$2, f))).filter((f) => !f.startsWith("..") && !path$1.isAbsolute(f) && SOURCE_FILE.test(f)) : await changedFiles(root$2);
 	if (files.length === 0) return "# Code quality review: nothing to check\nNo changed source files (git diff vs HEAD is empty). If you edited files outside git, pass them in `files`.";
 	const [types$1, lintResult] = await Promise.all([typeCheck(root$2, files), lint(root$2, files)]);
 	const automatedFailed = types$1.status === "FAIL" || lintResult.status === "FAIL";

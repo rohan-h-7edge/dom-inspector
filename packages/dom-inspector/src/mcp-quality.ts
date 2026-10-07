@@ -132,6 +132,31 @@ async function configsToCheck(tsc: string, config: string): Promise<string[]> {
   }
 }
 
+async function runTsc(tsc: string, config: string, root: string): Promise<string> {
+  const args = ["--noEmit", "--pretty", "false", "-p", config];
+  const { output } = await run(tsc, args, root);
+  // TS5103: tsconfig's ignoreDeprecations value is invalid for this TypeScript
+  // version, which stops tsc before it checks any file. Retry with one it accepts.
+  if (!output.includes("TS5103")) return output;
+  return (await run(tsc, [...args, "--ignoreDeprecations", "5.0"], root)).output;
+}
+
+/** Splits tsc output into errors in changed files, a count of other errors, and a fatal (file-less) error. */
+function classifyTscOutput(output: string, changed: Set<string>, root: string) {
+  const inChanged: string[] = [];
+  let ignored = 0;
+  let fatal: string | null = null;
+  for (const line of output.split("\n")) {
+    if (!line.includes("error TS")) continue;
+    const match = line.match(/^(.+?)\(\d+,\d+\): error TS/);
+    // TS18003: a referenced config has no input files — nothing to check there.
+    if (!match) fatal ??= line.includes("TS18003") ? null : line;
+    else if (changed.has(path.relative(root, path.resolve(root, match[1])))) inChanged.push(line);
+    else ignored++;
+  }
+  return { inChanged, ignored, fatal };
+}
+
 /** Type-checks each changed TS file against its nearest tsconfig; reports only errors in changed files. */
 async function typeCheck(root: string, files: string[]): Promise<CheckResult> {
   const tsFiles = files.filter((f) => TS_FILE.test(f));
@@ -150,22 +175,10 @@ async function typeCheck(root: string, files: string[]): Promise<CheckResult> {
     if (!tsc) return { status: "SKIPPED", summary: "TypeScript (tsc) is not installed" };
 
     for (const config of await configsToCheck(tsc, nearest)) {
-      const args = ["--noEmit", "--pretty", "false", "-p", config];
-      let { output } = await run(tsc, args, root);
-      // TS5103: tsconfig's ignoreDeprecations value is invalid for this TypeScript
-      // version, which stops tsc before it checks any file. Retry with one it accepts.
-      if (output.includes("TS5103")) {
-        ({ output } = await run(tsc, [...args, "--ignoreDeprecations", "5.0"], root));
-      }
-      for (const line of output.split("\n")) {
-        if (!line.includes("error TS")) continue;
-        const match = line.match(/^(.+?)\(\d+,\d+\): error TS/);
-        if (!match) {
-          return { status: "FAIL", summary: "tsc could not run", details: line };
-        }
-        if (changed.has(path.relative(root, path.resolve(root, match[1])))) errors.push(line);
-        else ignored++;
-      }
+      const result = classifyTscOutput(await runTsc(tsc, config, root), changed, root);
+      if (result.fatal) return { status: "FAIL", summary: "tsc could not run", details: result.fatal };
+      errors.push(...result.inChanged);
+      ignored += result.ignored;
     }
   }
 
@@ -187,22 +200,25 @@ async function lint(root: string, files: string[]): Promise<CheckResult> {
   const byEslintConfig = groupBy(existing, (f) =>
     findUp(path.dirname(path.join(root, f)), root, ESLINT_CONFIGS),
   );
-  if (byEslintConfig.size > 0) {
-    const outputs: string[] = [];
-    let failed = false;
-    for (const [config, group] of byEslintConfig) {
-      const dir = path.dirname(config);
-      const eslint = findBin(dir, root, "eslint");
-      if (!eslint) continue;
-      const { code, output } = await run(
-        eslint,
-        group.map((f) => path.join(root, f)),
-        dir,
-      );
-      if (code === 2) return { status: "SKIPPED", summary: "ESLint failed to run", details: output.trim() };
-      if (code !== 0) failed = true;
-      if (output.trim()) outputs.push(output.trim());
-    }
+  const outputs: string[] = [];
+  let failed = false;
+  let eslintRan = false;
+  for (const [config, group] of byEslintConfig) {
+    const dir = path.dirname(config);
+    const eslint = findBin(dir, root, "eslint");
+    if (!eslint) continue;
+    eslintRan = true;
+    const { code, output } = await run(
+      eslint,
+      group.map((f) => path.join(root, f)),
+      dir,
+    );
+    if (code === 2) return { status: "SKIPPED", summary: "ESLint failed to run", details: output.trim() };
+    if (code !== 0) failed = true;
+    if (output.trim()) outputs.push(output.trim());
+  }
+  // A config without an installed ESLint must not count as a clean lint — fall through to oxlint.
+  if (eslintRan) {
     if (outputs.length || failed) {
       return {
         status: failed ? "FAIL" : "PASS",
@@ -215,7 +231,12 @@ async function lint(root: string, files: string[]): Promise<CheckResult> {
 
   const oxlint = findBin(root, root, "oxlint");
   if (oxlint) {
-    const { code, output } = await run(oxlint, existing, root);
+    // "./" prefix so a file name can never be parsed as a CLI flag.
+    const { code, output } = await run(
+      oxlint,
+      existing.map((f) => `./${f}`),
+      root,
+    );
     return code === 0
       ? { status: "PASS", summary: "oxlint: no errors", details: output.trim() || undefined }
       : { status: "FAIL", summary: "oxlint errors", details: output.trim() };
@@ -286,7 +307,10 @@ function formatCheck(title: string, result: CheckResult): string {
 async function reviewCodeQuality(requested?: string[]): Promise<string> {
   const root = await projectRoot();
   const files = requested?.length
-    ? requested.map((f) => path.relative(root, path.resolve(root, f))).filter((f) => SOURCE_FILE.test(f))
+    ? requested
+        .map((f) => path.relative(root, path.resolve(root, f)))
+        // Only files inside the project — never lint/type-check paths outside it.
+        .filter((f) => !f.startsWith("..") && !path.isAbsolute(f) && SOURCE_FILE.test(f))
     : await changedFiles(root);
 
   if (files.length === 0) {

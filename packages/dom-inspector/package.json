@@ -19,13 +19,14 @@
     "unplugin"
   ],
   "bin": {
-    "dom-inspector-server": "./dist/cli.js",
-    "dom-inspector": "./dist/cli.js"
+    "dom-inspector-server": "dist/cli.js",
+    "dom-inspector": "dist/cli.js"
   },
   "files": [
     "dist",
     "client/dist",
-    "client.d.ts"
+    "client.d.ts",
+    "docs"
   ],
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -87,7 +88,7 @@
     "format": "oxfmt .",
     "format:check": "oxfmt --check .",
     "test": "vitest run",
-    "prepublishOnly": "cp ./README.md ../../ && npm run build"
+    "prepublishOnly": "npm run build"
   },
   "peerDependencies": {
     "esbuild": ">=0.17.0",

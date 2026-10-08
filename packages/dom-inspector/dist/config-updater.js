@@ -117893,6 +117893,8 @@ function getStdioText(stdioid) {
 //#endregion
 //#region src/mcp-quality.ts
 const SOURCE_FILE = /\.(ts|tsx|mts|cts|js|jsx|mjs|cjs)$/;
+const STYLE_FILE = /\.(css|scss|sass|less)$/;
+const isReviewable = (f) => SOURCE_FILE.test(f) || STYLE_FILE.test(f);
 const TS_FILE = /\.(ts|tsx|mts|cts)$/;
 const REACT_FILE = /\.(tsx|jsx)$/;
 const IGNORED_DIR = /(^|\/)(node_modules|dist|dist-[a-z]+|build|out|coverage|\.next|\.nuxt|\.svelte-kit|\.claude)\//;
@@ -117949,7 +117951,13 @@ function groupBy(files, keyOf) {
 }
 async function projectRoot() {
 	const { code, output } = await run("git", ["rev-parse", "--show-toplevel"], process.cwd());
-	return code === 0 ? output.trim() : process.cwd();
+	return code === 0 ? {
+		root: output.trim(),
+		isGit: true
+	} : {
+		root: process.cwd(),
+		isGit: false
+	};
 }
 async function changedFiles(root$2) {
 	const [diff$2, untracked] = await Promise.all([run("git", [
@@ -117961,7 +117969,7 @@ async function changedFiles(root$2) {
 		"--others",
 		"--exclude-standard"
 	], root$2)]);
-	const lines = [diff$2, untracked].filter((r) => r.code === 0).flatMap((r) => r.output.split("\n")).map((line$1) => line$1.trim()).filter((line$1) => SOURCE_FILE.test(line$1) && !IGNORED_DIR.test(line$1));
+	const lines = [diff$2, untracked].filter((r) => r.code === 0).flatMap((r) => r.output.split("\n")).map((line$1) => line$1.trim()).filter((line$1) => isReviewable(line$1) && !IGNORED_DIR.test(line$1));
 	return [...new Set(lines)].sort();
 }
 /**
@@ -118065,10 +118073,10 @@ async function typeCheck(root$2, files) {
 }
 /** Lints with the project's ESLint when it has a config, otherwise oxlint if installed. */
 async function lint(root$2, files) {
-	const existing = files.filter((f) => existsSync$1(path$1.join(root$2, f)));
+	const existing = files.filter((f) => SOURCE_FILE.test(f) && existsSync$1(path$1.join(root$2, f)));
 	if (existing.length === 0) return {
 		status: "SKIPPED",
-		summary: "no files to lint"
+		summary: "no script files changed"
 	};
 	const byEslintConfig = groupBy(existing, (f) => findUp(path$1.dirname(path$1.join(root$2, f)), root$2, ESLINT_CONFIGS));
 	const outputs = [];
@@ -118124,9 +118132,15 @@ function rulesDir() {
 }
 function checklist(files) {
 	const hasReact = files.some((f) => REACT_FILE.test(f));
+	const hasStyles = files.some((f) => STYLE_FILE.test(f));
+	const hasScripts = files.some((f) => SOURCE_FILE.test(f));
 	const sections = [];
-	if (hasReact) {
-		sections.push(`### React (react-best-practices, composition-patterns)
+	if (hasStyles) sections.push(`### Styles (code-review-skill css guide, web-design-guidelines)
+- 🔴 Move or space elements through the layout's own mechanism (flex/grid alignment, gap, margin, padding) — not by nudging with \`left\`/\`top\` on \`position: relative\` or \`transform\` offsets, which break on other screen sizes and content lengths.
+- 🟡 Use the project's existing design tokens / CSS variables / utility classes instead of new hard-coded colors, sizes or z-indexes; no \`!important\`.
+- 🟡 Change only the selectors the task needs; keep specificity flat; check the rule doesn't also hit other components that share the class.
+- 🟡 Works at narrow widths too (no fixed px widths that overflow; long text wraps).`);
+	if (hasReact) sections.push(`### React (react-best-practices, composition-patterns)
 - 🔴 Hooks: no conditional hooks; effect dependencies complete; every listener/interval/subscription cleaned up in the effect's return.
 - 🔴 Don't define components inside components (\`rerender-no-inline-components\`).
 - 🟡 Derive state during render instead of syncing it in effects (\`rerender-derived-state-no-effect\`); functional setState for updates based on the previous value.
@@ -118134,21 +118148,22 @@ function checklist(files) {
 - 🟡 Conditional rendering with a ternary, not \`count && <X/>\` (\`rendering-conditional-render\`).
 - 🟡 No boolean props that switch behavior — use explicit variants or composition (\`architecture-avoid-boolean-props\`); children over render props.
 - 🟡 One responsibility per component; move non-UI logic into hooks; split components that grow past ~200 lines.`);
-		sections.push(`### UI & accessibility (web-design-guidelines)
+	if (hasReact || hasStyles) sections.push(`### UI & accessibility (web-design-guidelines)
 - 🔴 Actions use \`<button>\`, navigation uses \`<a>\` — no \`<div onClick>\`; icon-only buttons have \`aria-label\`; form controls have labels; images have \`alt\`.
 - 🔴 Visible keyboard focus — never \`outline: none\` without a \`:focus-visible\` replacement.
 - 🟡 Async messages (toasts, errors) use \`aria-live\`; animations honor \`prefers-reduced-motion\`; no \`transition: all\`.
 - 🟡 Long text truncates or wraps; empty states handled; loading text ends with "…".`);
-	}
-	sections.push(`### Design & clean code (code-quality, code-review-skill)
+	if (hasScripts) {
+		sections.push(`### Design & clean code (code-quality, code-review-skill)
 - 🟡 SOLID: single responsibility; extend through maps/strategies instead of growing type-switches; depend on injected abstractions, not concrete singletons; narrow props/interfaces.
 - 🟡 Functions under ~50 lines, cyclomatic complexity under 10, nesting ≤ 3; more than 4 parameters → an options object.
 - 🟡 Reuse existing helpers instead of duplicating logic; descriptive names; no magic numbers.
 - 🟢 No \`any\`; no leftover \`console.log\`; TODOs reference a ticket.`);
-	sections.push(`### Correctness & security (code-review-skill)
+		sections.push(`### Correctness & security (code-review-skill)
 - 🔴 No unsanitized HTML (\`dangerouslySetInnerHTML\`, \`innerHTML\`) from user or remote data; no secrets in client code; validate external input.
 - 🔴 Every promise awaited or handled; async errors reach the user or a log; no state updates after unmount (abort in-flight requests).
 - 🟡 Edge cases: empty/null data, failed requests, double submissions, race conditions.`);
+	}
 	return sections.join("\n\n");
 }
 function rulesIndex(dir) {
@@ -118157,7 +118172,7 @@ function rulesIndex(dir) {
 - React performance — ${p$1("react-best-practices/SKILL.md")} (one file per rule in ${p$1("react-best-practices/rules/")})
 - Component composition — ${p$1("composition-patterns/SKILL.md")} (rules in ${p$1("composition-patterns/rules/")})
 - UI & accessibility — ${p$1("web-design-guidelines/guidelines.md")}
-- Review guides — ${p$1("code-review/reference/")} (react.md, typescript.md, architecture-review-guide.md, security-review-guide.md, code-quality-universal.md)
+- Review guides — ${p$1("code-review/reference/")} (react.md, typescript.md, css-less-sass.md, architecture-review-guide.md, security-review-guide.md, code-quality-universal.md)
 - SOLID & clean code — ${p$1("code-quality/SKILL.md")}`;
 }
 function formatCheck(title, result) {
@@ -118165,9 +118180,9 @@ function formatCheck(title, result) {
 	return `## ${title}: ${result.status} — ${result.summary}${body}`;
 }
 async function reviewCodeQuality(requested) {
-	const root$2 = await projectRoot();
-	const files = requested?.length ? requested.map((f) => path$1.relative(root$2, path$1.resolve(root$2, f))).filter((f) => !f.startsWith("..") && !path$1.isAbsolute(f) && SOURCE_FILE.test(f)) : await changedFiles(root$2);
-	if (files.length === 0) return "# Code quality review: nothing to check\nNo changed source files (git diff vs HEAD is empty). If you edited files outside git, pass them in `files`.";
+	const { root: root$2, isGit } = await projectRoot();
+	const files = requested?.length ? requested.map((f) => path$1.relative(root$2, path$1.resolve(root$2, f))).filter((f) => !f.startsWith("..") && !path$1.isAbsolute(f) && isReviewable(f)) : isGit ? await changedFiles(root$2) : [];
+	if (files.length === 0) return `# Code quality review: nothing checked\n${requested?.length ? `None of the given files are reviewable source or style files inside ${root$2}: ${requested.join(", ")}` : isGit ? "No changed source or style files (git diff vs HEAD is empty)." : `${root$2} is not a git repository, so changes can't be detected — call again with the files you changed in \`files\`.`}\nDo not treat this as a pass.`;
 	const [types$1, lintResult] = await Promise.all([typeCheck(root$2, files), lint(root$2, files)]);
 	const automatedFailed = types$1.status === "FAIL" || lintResult.status === "FAIL";
 	const dir = rulesDir();

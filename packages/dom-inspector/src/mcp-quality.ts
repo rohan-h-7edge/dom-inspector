@@ -16,9 +16,12 @@ import { TOOL_SCHEMAS } from "./tool-schemas.js";
 type ToolRegistrar = { tool: (...args: any[]) => any };
 
 const SOURCE_FILE = /\.(ts|tsx|mts|cts|js|jsx|mjs|cjs)$/;
+const STYLE_FILE = /\.(css|scss|sass|less)$/;
+const isReviewable = (f: string) => SOURCE_FILE.test(f) || STYLE_FILE.test(f);
 const TS_FILE = /\.(ts|tsx|mts|cts)$/;
 const REACT_FILE = /\.(tsx|jsx)$/;
-const IGNORED_DIR = /(^|\/)(node_modules|dist|dist-[a-z]+|build|out|coverage|\.next|\.nuxt|\.svelte-kit|\.claude)\//;
+const IGNORED_DIR =
+  /(^|\/)(node_modules|dist|dist-[a-z]+|build|out|coverage|\.next|\.nuxt|\.svelte-kit|\.claude)\//;
 const ESLINT_CONFIGS = [
   "eslint.config.js",
   "eslint.config.mjs",
@@ -87,9 +90,9 @@ function groupBy(files: string[], keyOf: (file: string) => string | null): Map<s
   return groups;
 }
 
-async function projectRoot(): Promise<string> {
+async function projectRoot(): Promise<{ root: string; isGit: boolean }> {
   const { code, output } = await run("git", ["rev-parse", "--show-toplevel"], process.cwd());
-  return code === 0 ? output.trim() : process.cwd();
+  return code === 0 ? { root: output.trim(), isGit: true } : { root: process.cwd(), isGit: false };
 }
 
 async function changedFiles(root: string): Promise<string[]> {
@@ -101,7 +104,7 @@ async function changedFiles(root: string): Promise<string[]> {
     .filter((r) => r.code === 0)
     .flatMap((r) => r.output.split("\n"))
     .map((line) => line.trim())
-    .filter((line) => SOURCE_FILE.test(line) && !IGNORED_DIR.test(line));
+    .filter((line) => isReviewable(line) && !IGNORED_DIR.test(line));
   return [...new Set(lines)].sort();
 }
 
@@ -176,7 +179,8 @@ async function typeCheck(root: string, files: string[]): Promise<CheckResult> {
 
     for (const config of await configsToCheck(tsc, nearest)) {
       const result = classifyTscOutput(await runTsc(tsc, config, root), changed, root);
-      if (result.fatal) return { status: "FAIL", summary: "tsc could not run", details: result.fatal };
+      if (result.fatal)
+        return { status: "FAIL", summary: "tsc could not run", details: result.fatal };
       errors.push(...result.inChanged);
       ignored += result.ignored;
     }
@@ -194,8 +198,8 @@ async function typeCheck(root: string, files: string[]): Promise<CheckResult> {
 
 /** Lints with the project's ESLint when it has a config, otherwise oxlint if installed. */
 async function lint(root: string, files: string[]): Promise<CheckResult> {
-  const existing = files.filter((f) => existsSync(path.join(root, f)));
-  if (existing.length === 0) return { status: "SKIPPED", summary: "no files to lint" };
+  const existing = files.filter((f) => SOURCE_FILE.test(f) && existsSync(path.join(root, f)));
+  if (existing.length === 0) return { status: "SKIPPED", summary: "no script files changed" };
 
   const byEslintConfig = groupBy(existing, (f) =>
     findUp(path.dirname(path.join(root, f)), root, ESLINT_CONFIGS),
@@ -213,7 +217,8 @@ async function lint(root: string, files: string[]): Promise<CheckResult> {
       group.map((f) => path.join(root, f)),
       dir,
     );
-    if (code === 2) return { status: "SKIPPED", summary: "ESLint failed to run", details: output.trim() };
+    if (code === 2)
+      return { status: "SKIPPED", summary: "ESLint failed to run", details: output.trim() };
     if (code !== 0) failed = true;
     if (output.trim()) outputs.push(output.trim());
   }
@@ -248,15 +253,25 @@ async function lint(root: string, files: string[]): Promise<CheckResult> {
 function rulesDir(): string | null {
   const here = path.dirname(fileURLToPath(import.meta.url));
   return (
-    [path.resolve(here, "../quality-rules"), path.resolve(here, "../../quality-rules")].find((dir) =>
-      existsSync(dir),
+    [path.resolve(here, "../quality-rules"), path.resolve(here, "../../quality-rules")].find(
+      (dir) => existsSync(dir),
     ) ?? null
   );
 }
 
 function checklist(files: string[]): string {
   const hasReact = files.some((f) => REACT_FILE.test(f));
+  const hasStyles = files.some((f) => STYLE_FILE.test(f));
+  const hasScripts = files.some((f) => SOURCE_FILE.test(f));
   const sections: string[] = [];
+
+  if (hasStyles) {
+    sections.push(`### Styles (code-review-skill css guide, web-design-guidelines)
+- 🔴 Move or space elements through the layout's own mechanism (flex/grid alignment, gap, margin, padding) — not by nudging with \`left\`/\`top\` on \`position: relative\` or \`transform\` offsets, which break on other screen sizes and content lengths.
+- 🟡 Use the project's existing design tokens / CSS variables / utility classes instead of new hard-coded colors, sizes or z-indexes; no \`!important\`.
+- 🟡 Change only the selectors the task needs; keep specificity flat; check the rule doesn't also hit other components that share the class.
+- 🟡 Works at narrow widths too (no fixed px widths that overflow; long text wraps).`);
+  }
 
   if (hasReact) {
     sections.push(`### React (react-best-practices, composition-patterns)
@@ -267,7 +282,9 @@ function checklist(files: string[]): string {
 - 🟡 Conditional rendering with a ternary, not \`count && <X/>\` (\`rendering-conditional-render\`).
 - 🟡 No boolean props that switch behavior — use explicit variants or composition (\`architecture-avoid-boolean-props\`); children over render props.
 - 🟡 One responsibility per component; move non-UI logic into hooks; split components that grow past ~200 lines.`);
+  }
 
+  if (hasReact || hasStyles) {
     sections.push(`### UI & accessibility (web-design-guidelines)
 - 🔴 Actions use \`<button>\`, navigation uses \`<a>\` — no \`<div onClick>\`; icon-only buttons have \`aria-label\`; form controls have labels; images have \`alt\`.
 - 🔴 Visible keyboard focus — never \`outline: none\` without a \`:focus-visible\` replacement.
@@ -275,16 +292,18 @@ function checklist(files: string[]): string {
 - 🟡 Long text truncates or wraps; empty states handled; loading text ends with "…".`);
   }
 
-  sections.push(`### Design & clean code (code-quality, code-review-skill)
+  if (hasScripts) {
+    sections.push(`### Design & clean code (code-quality, code-review-skill)
 - 🟡 SOLID: single responsibility; extend through maps/strategies instead of growing type-switches; depend on injected abstractions, not concrete singletons; narrow props/interfaces.
 - 🟡 Functions under ~50 lines, cyclomatic complexity under 10, nesting ≤ 3; more than 4 parameters → an options object.
 - 🟡 Reuse existing helpers instead of duplicating logic; descriptive names; no magic numbers.
 - 🟢 No \`any\`; no leftover \`console.log\`; TODOs reference a ticket.`);
 
-  sections.push(`### Correctness & security (code-review-skill)
+    sections.push(`### Correctness & security (code-review-skill)
 - 🔴 No unsanitized HTML (\`dangerouslySetInnerHTML\`, \`innerHTML\`) from user or remote data; no secrets in client code; validate external input.
 - 🔴 Every promise awaited or handled; async errors reach the user or a log; no state updates after unmount (abort in-flight requests).
 - 🟡 Edge cases: empty/null data, failed requests, double submissions, race conditions.`);
+  }
 
   return sections.join("\n\n");
 }
@@ -295,7 +314,7 @@ function rulesIndex(dir: string): string {
 - React performance — ${p("react-best-practices/SKILL.md")} (one file per rule in ${p("react-best-practices/rules/")})
 - Component composition — ${p("composition-patterns/SKILL.md")} (rules in ${p("composition-patterns/rules/")})
 - UI & accessibility — ${p("web-design-guidelines/guidelines.md")}
-- Review guides — ${p("code-review/reference/")} (react.md, typescript.md, architecture-review-guide.md, security-review-guide.md, code-quality-universal.md)
+- Review guides — ${p("code-review/reference/")} (react.md, typescript.md, css-less-sass.md, architecture-review-guide.md, security-review-guide.md, code-quality-universal.md)
 - SOLID & clean code — ${p("code-quality/SKILL.md")}`;
 }
 
@@ -305,16 +324,23 @@ function formatCheck(title: string, result: CheckResult): string {
 }
 
 async function reviewCodeQuality(requested?: string[]): Promise<string> {
-  const root = await projectRoot();
+  const { root, isGit } = await projectRoot();
   const files = requested?.length
     ? requested
         .map((f) => path.relative(root, path.resolve(root, f)))
         // Only files inside the project — never lint/type-check paths outside it.
-        .filter((f) => !f.startsWith("..") && !path.isAbsolute(f) && SOURCE_FILE.test(f))
-    : await changedFiles(root);
+        .filter((f) => !f.startsWith("..") && !path.isAbsolute(f) && isReviewable(f))
+    : isGit
+      ? await changedFiles(root)
+      : [];
 
   if (files.length === 0) {
-    return "# Code quality review: nothing to check\nNo changed source files (git diff vs HEAD is empty). If you edited files outside git, pass them in `files`.";
+    const reason = requested?.length
+      ? `None of the given files are reviewable source or style files inside ${root}: ${requested.join(", ")}`
+      : isGit
+        ? "No changed source or style files (git diff vs HEAD is empty)."
+        : `${root} is not a git repository, so changes can't be detected — call again with the files you changed in \`files\`.`;
+    return `# Code quality review: nothing checked\n${reason}\nDo not treat this as a pass.`;
   }
 
   const [types, lintResult] = await Promise.all([typeCheck(root, files), lint(root, files)]);
